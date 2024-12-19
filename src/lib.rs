@@ -110,17 +110,18 @@ const AMOLED_INIT_CMDS: &[LcdCommand] = &[
 
 pub struct DisplayDriver<SPI> {
     spi: SPI,
+    delay: Delay,
 }
 
 impl<SPI> DisplayDriver<SPI>
 where
     SPI: SpiDevice,
 {
-    pub fn new(spi: SPI) -> Self {
-        Self { spi }
+    pub fn new(spi: SPI, delay: Delay) -> Self {
+        Self { spi, delay }
     }
 
-    pub fn init(&mut self, dc_pin: GpioPin<7>, rst_pin: GpioPin<17>, delay: &mut Delay)
+    pub fn init(&mut self, dc_pin: GpioPin<7>, rst_pin: GpioPin<17>)
     where
         SPI: SpiDevice,
     {
@@ -129,11 +130,11 @@ where
 
         // Reset the display
         rst_pin.set_high();
-        delay.delay_millis(200);
+        self.delay.delay_millis(200);
         rst_pin.set_low();
-        delay.delay_millis(300);
+        self.delay.delay_millis(300);
         rst_pin.set_high();
-        delay.delay_millis(200);
+        self.delay.delay_millis(200);
 
         // Send initialization commands
         for cmd in AMOLED_INIT_CMDS {
@@ -160,7 +161,7 @@ where
 
             // Apply delay if specified
             if let Some(ms) = cmd.delay_after {
-                delay.delay_millis(ms);
+                self.delay.delay_millis(ms);
             }
         }
     }

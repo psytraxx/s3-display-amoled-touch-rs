@@ -41,7 +41,7 @@ async fn main(_spawner: Spawner) -> ! {
 
     psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
-    let mut delay = Delay::new();
+    let delay = Delay::new();
 
     // SPI pins
     let sck = Output::new(peripherals.GPIO47, Level::Low);
@@ -67,9 +67,9 @@ async fn main(_spawner: Spawner) -> ! {
 
     // Initialize the display
 
-    let mut driver = DisplayDriver::new(spi);
+    let mut driver = DisplayDriver::new(spi, delay);
 
-    driver.init(peripherals.GPIO7, peripherals.GPIO17, &mut delay);
+    driver.init(peripherals.GPIO7, peripherals.GPIO17);
 
     loop {
         info!("Hello world!");
