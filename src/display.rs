@@ -1,5 +1,3 @@
-#![no_std]
-
 use embedded_hal::spi::Operation;
 use embedded_hal::spi::SpiDevice;
 use esp_hal::{
@@ -8,14 +6,14 @@ use esp_hal::{
 };
 
 // Define a structure for the LCD command
-struct LcdCommand<'a> {
+pub struct LcdCommand<'a> {
     addr: u8,                 // Command address
     params: &'a [u8],         // Command parameters
     delay_after: Option<u32>, // Delay in milliseconds after sending the command
 }
 
 // AMOLED initialization commands
-const AMOLED_INIT_CMDS: &[LcdCommand] = &[
+pub const AMOLED_INIT_CMDS: &[LcdCommand] = &[
     LcdCommand {
         addr: 0xFE,
         params: &[0x04],
