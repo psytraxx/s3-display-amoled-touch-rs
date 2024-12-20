@@ -73,21 +73,6 @@ static const DisplayConfigure_t RM67162_AMOLED_SPI  = {
     bool fullRefresh;
 } DisplayConfigure_t; */
 
-/*static const  BoardsConfigure_t BOARD_AMOLED_191_SPI = {
-    // RM67162 Driver
-    RM67162_AMOLED_SPI,
-    &AMOLED_191_TOUCH_PINS,     //Touch CST816T
-    &AMOLED_191_SPI_PMU_PINS,   //PMU
-    NULL,                       //SENSOR
-    &AMOLED_191_SPI_SD_PINS,    //SDCard
-    AMOLED_191_BUTTONTS,        //Button Pins
-    1, //Button Number
-    -1,//pixelsPins
-    4, //adcPins
-    38,//PMICEnPins
-    false,//framebuffer
-}; */
-
 // Define a structure for the LCD command
 struct LcdCommand<'a> {
     addr: u8,                 // Command address
