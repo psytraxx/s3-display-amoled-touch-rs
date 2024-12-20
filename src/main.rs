@@ -2,35 +2,33 @@
 #![no_main]
 #![feature(async_closure)]
 
-use core::cell::RefCell;
-
 use defmt::{error, info};
-use display_interface_spi::SPIInterface;
-use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::NoopMutex;
 use embedded_graphics_core::prelude::RgbColor;
 use esp_alloc::psram_allocator;
+use esp_display_interface_spi_dma::display_interface_spi_dma::{self};
+use esp_hal::dma::{Dma, DmaPriority};
 use esp_hal::gpio::{Input, Level, Output};
 use esp_hal::i2c::master::I2c;
+use esp_hal::prelude::*;
 use esp_hal::rng::Rng;
 use esp_hal::spi::master::Config;
 use esp_hal::spi::SpiMode;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{delay::Delay, spi::master::Spi};
-use esp_hal::{prelude::*, Blocking};
 use mipidsi::options::Orientation;
 use mipidsi::Builder;
 use rm67162::RM67162;
-use static_cell::StaticCell;
 use {defmt_rtt as _, esp_backtrace as _};
 extern crate alloc;
 
 mod rm67162;
 
 //https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series/blob/8c72b786373fbaef46ce35a6db924d6e16a0c3ec/src/LilyGo_AMOLED.cpp#L806
+pub const DISPLAY_HEIGHT: u16 = 536;
+pub const DISPLAY_WIDTH: u16 = 240;
 
-static DISP_SPI_BUS: StaticCell<NoopMutex<RefCell<Spi<'static, Blocking>>>> = StaticCell::new();
+pub const LCD_PIXELS: usize = (DISPLAY_HEIGHT as usize) * (DISPLAY_WIDTH as usize);
 
 #[main]
 async fn main(_spawner: Spawner) -> ! {
@@ -140,7 +138,7 @@ async fn main(_spawner: Spawner) -> ! {
         false,//framebuffer
     }; */
 
-    let delay = Delay::new();
+    let mut delay = Delay::new();
 
     // SPI pins
     let sck = Output::new(peripherals.GPIO47, Level::Low);
@@ -153,39 +151,40 @@ async fn main(_spawner: Spawner) -> ! {
     pmicen.set_high();
     info!("PMICEN set high");
 
+    let dma = Dma::new(peripherals.DMA);
+    let dma_channel = dma.channel0;
+
     // Configure SPI
-    let spi = Spi::new_with_config(
+    let spi_bus = Spi::new_with_config(
         peripherals.SPI2,
         Config {
-            frequency: 40.MHz(), //TODO: 40MHz
+            frequency: 80.MHz(), //TODO: 40MHz
             mode: SpiMode::Mode0,
             ..Config::default()
         },
     )
     .with_sck(sck)
-    .with_mosi(mosi);
+    .with_cs(cs)
+    .with_mosi(mosi)
+    .with_dma(dma_channel.configure(false, DmaPriority::Priority0));
 
-    let spi_bus = NoopMutex::new(RefCell::new(spi));
-    let spi_bus = DISP_SPI_BUS.init(spi_bus);
     let dc_pin = peripherals.GPIO7;
     let rst_pin = peripherals.GPIO17;
 
-    let spi = SpiDevice::new(spi_bus, cs);
-
     // Initialize the display
-    let di = SPIInterface::new(spi, Output::new(dc_pin, Level::Low));
+    let di =
+        display_interface_spi_dma::new_no_cs(LCD_PIXELS, spi_bus, Output::new(dc_pin, Level::Low));
 
     let mut display = Builder::new(RM67162, di)
         .orientation(Orientation::default())
-        .display_size(240, 536)
+        .display_size(DISPLAY_WIDTH, DISPLAY_HEIGHT)
         .reset_pin(Output::new(rst_pin, Level::High))
-        .init(&mut embassy_time::Delay)
+        .init(&mut delay)
         .unwrap();
 
     loop {
-        delay.delay(100.micros());
-        let x = rng.random() % 240;
-        let y = rng.random() % 536;
+        let x = rng.random() % DISPLAY_WIDTH as u32;
+        let y = rng.random() % DISPLAY_HEIGHT as u32;
         display
             .set_pixel(x as u16, y as u16, RgbColor::MAGENTA)
             .expect("set_pixel failed");
