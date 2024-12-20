@@ -24,7 +24,6 @@ extern crate alloc;
 
 mod rm67162;
 
-//https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series/blob/8c72b786373fbaef46ce35a6db924d6e16a0c3ec/src/LilyGo_AMOLED.cpp#L806
 pub const DISPLAY_HEIGHT: u16 = 536;
 pub const DISPLAY_WIDTH: u16 = 240;
 
@@ -63,80 +62,6 @@ async fn main(_spawner: Spawner) -> ! {
     } else {
         error!("Unable to detect 1.91-inch touch board model!");
     }
-
-    /*static const  BoardsConfigure_t BOARD_AMOLED_191_SPI = {
-        // RM67162 Driver
-        RM67162_AMOLED_SPI,
-        &AMOLED_191_TOUCH_PINS,     //Touch CST816T
-        &AMOLED_191_SPI_PMU_PINS,   //PMU
-        NULL,                       //SENSOR
-        &AMOLED_191_SPI_SD_PINS,    //SDCard
-        AMOLED_191_BUTTONTS,        //Button Pins
-        1, //Button Number
-        -1,//pixelsPins
-        4, //adcPins
-        38,//PMICEnPins
-        false,//framebuffer
-    }; */
-
-    /*// LILYGO 1.91 Inch AMOLED(RM67162) S3R8
-    // https://www.lilygo.cc/products/t-display-s3-amoled
-    static const DisplayConfigure_t RM67162_AMOLED_SPI  = {
-        18,//BOARD_DISP_DATA0,          //MOSI
-        7,//BOARD_DISP_DATA1,           //DC
-        -1,//BOARD_DISP_DATA2,
-        -1,//BOARD_DISP_DATA3,
-        47,//BOARD_DISP_SCK,            //SCK
-        6,//BOARD_DISP_CS,              //CS
-        BOARD_NONE_PIN,//DC
-        17,//BOARD_DISP_RESET,          //RST
-        9, //BOARD_DISP_TE,
-        8, //command bit
-        24,//address bit
-        40000000,
-        (lcd_cmd_t *)rm67162_spi_cmd,
-        RM67162_INIT_SPI_SEQUENCE_LENGTH,
-        RM67162_WIDTH,//width
-        RM67162_HEIGHT,//height
-        0,//frameBufferSize
-        false //fullRefresh
-    }; */
-
-    /*typedef struct __DisplayConfigure {
-        int d0;
-        int d1;
-        int d2;
-        int d3;
-        int sck;
-        int cs;
-        int dc;
-        int rst;
-        int te;
-        uint8_t cmdBit;
-        uint8_t addBit;
-        int  freq;
-        lcd_cmd_t *initSequence;
-        uint32_t initSize;
-        uint16_t width;
-        uint16_t height;
-        uint32_t frameBufferSize;
-        bool fullRefresh;
-    } DisplayConfigure_t; */
-
-    /*static const  BoardsConfigure_t BOARD_AMOLED_191_SPI = {
-        // RM67162 Driver
-        RM67162_AMOLED_SPI,
-        &AMOLED_191_TOUCH_PINS,     //Touch CST816T
-        &AMOLED_191_SPI_PMU_PINS,   //PMU
-        NULL,                       //SENSOR
-        &AMOLED_191_SPI_SD_PINS,    //SDCard
-        AMOLED_191_BUTTONTS,        //Button Pins
-        1, //Button Number
-        -1,//pixelsPins
-        4, //adcPins
-        38,//PMICEnPins
-        false,//framebuffer
-    }; */
 
     let mut delay = Delay::new();
 
