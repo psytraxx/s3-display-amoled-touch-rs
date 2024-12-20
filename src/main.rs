@@ -182,11 +182,27 @@ async fn main(_spawner: Spawner) -> ! {
         .init(&mut delay)
         .unwrap();
 
+    let mut x: u16 = 0;
+    let mut y: u16 = 0;
+
     loop {
-        let x = rng.random() % DISPLAY_WIDTH as u32;
-        let y = rng.random() % DISPLAY_HEIGHT as u32;
+        let x_rand = rng.random() as u16 % DISPLAY_WIDTH;
+        let y_rand = rng.random() as u16 % DISPLAY_HEIGHT;
         display
-            .set_pixel(x as u16, y as u16, RgbColor::MAGENTA)
+            .set_pixel(x_rand, y_rand, RgbColor::MAGENTA)
             .expect("set_pixel failed");
+
+        display
+            .set_pixel(x, y, RgbColor::GREEN)
+            .expect("set_pixel failed");
+
+        x += 1;
+        if x >= DISPLAY_WIDTH {
+            x = 0;
+            y += 1;
+            if y >= DISPLAY_HEIGHT {
+                y = 0;
+            }
+        }
     }
 }
