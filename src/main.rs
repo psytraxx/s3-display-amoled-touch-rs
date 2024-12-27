@@ -2,36 +2,58 @@
 #![no_main]
 #![feature(async_closure)]
 
+use bq25896::BQ25896;
+use core::cell::RefCell;
 use cst816s::CST816S;
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_time::Delay;
-use embedded_graphics_core::pixelcolor::raw::RawU16;
+use embedded_graphics::mono_font::iso_8859_1::FONT_10X20 as FONT;
+use embedded_graphics::mono_font::MonoTextStyle;
+//use embedded_graphics::pixelcolor::raw::RawU16;
+use embedded_graphics::prelude::{Dimensions, WebColors};
+use embedded_graphics::Drawable;
 use embedded_graphics_core::pixelcolor::Rgb565;
 use embedded_graphics_core::prelude::RgbColor;
+use embedded_hal::i2c::I2c as I2CBus;
+use embedded_hal_bus::i2c::RefCellDevice;
+use embedded_text::alignment::HorizontalAlignment;
+use embedded_text::style::{HeightMode, TextBoxStyle, TextBoxStyleBuilder};
+use embedded_text::TextBox;
 use esp_alloc::psram_allocator;
 use esp_display_interface_spi_dma::display_interface_spi_dma::{self};
 use esp_hal::dma::{Dma, DmaPriority};
 use esp_hal::gpio::{Input, Level, NoPin, Output};
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
-use esp_hal::rng::Rng;
+//use esp_hal::rng::Rng;
 use esp_hal::spi::master::Config;
+use esp_hal::spi::master::Spi;
 use esp_hal::spi::SpiMode;
 use esp_hal::timer::timg::TimerGroup;
-use esp_hal::{spi::master::Spi, Blocking};
 use mipidsi::options::Orientation;
 use mipidsi::Builder;
 use rm67162::RM67162;
 use {defmt_rtt as _, esp_backtrace as _};
+#[macro_use]
 extern crate alloc;
 
+mod bq25896;
 mod rm67162;
 
 pub const DISPLAY_HEIGHT: u16 = 536;
 pub const DISPLAY_WIDTH: u16 = 240;
 
 pub const LCD_PIXELS: usize = (DISPLAY_HEIGHT as usize) * (DISPLAY_WIDTH as usize);
+
+const TEXT_BOX_STYLE: TextBoxStyle = TextBoxStyleBuilder::new()
+    .height_mode(HeightMode::FitToText)
+    .alignment(HorizontalAlignment::Justified)
+    .build();
+
+const TEXT_STYLE: MonoTextStyle<Rgb565> = MonoTextStyle::new(&FONT, Rgb565::WHITE);
+
+const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
 
 #[main]
 async fn main(_spawner: Spawner) -> ! {
@@ -45,7 +67,7 @@ async fn main(_spawner: Spawner) -> ! {
         config
     });
 
-    let mut rng = Rng::new(peripherals.RNG);
+    //let mut rng = Rng::new(peripherals.RNG);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
 
@@ -53,47 +75,44 @@ async fn main(_spawner: Spawner) -> ! {
 
     psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
-    let mut i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
+    let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
         .with_sda(peripherals.GPIO3)
         .with_scl(peripherals.GPIO2);
 
-    detect_spi_model(&mut i2c);
+    let i2c_ref_cell = RefCell::new(i2c);
 
-    // Detect PMU chip
-    let slave_address = detect_pmu(&mut i2c);
-    info!("PMU Slave address: {:?}", slave_address);
+    let mut pmu = BQ25896::new(RefCellDevice::new(&i2c_ref_cell), BQ25896_SLAVE_ADDRESS)
+        .expect("BQ25896 init failed");
 
-    /*static const BoardPmuPins_t AMOLED_191_SPI_PMU_PINS =  {3/*SDA*/, 2/*SCL*/, 1/*IRQ*/}; */
+    info!("PMU chip id: {}", pmu.get_chip_id());
 
-    const CST816_SLAVE_ADDRESS: u8 = 0x15;
+    let mut text = format!("PMU charge status: {:?}", pmu.get_charge_status().unwrap());
 
-    /*static const  BoardsConfigure_t BOARD_AMOLED_191_SPI = {
-        static const BoardTouchPins_t AMOLED_191_TOUCH_PINS = {3 /*SDA*/, 2 /*SCL*/, 21/*IRQ*/, -1/*RST*/};
-    }; */
+    text.push_str(&format!(
+        "PMU bus status: {:?}",
+        pmu.get_bus_status().unwrap()
+    ));
 
-    // Try to find touch device
-    let mut touchpad = if i2c.write(CST816_SLAVE_ADDRESS, &[]).is_ok() {
-        // Touch device found
-        // Initialize touch driver
+    text.push_str(&format!(
+        "VBus voltage: {:?}mv",
+        pmu.get_battery_voltage().unwrap()
+    ));
 
-        let touch_int = peripherals.GPIO21;
-        let touch_int = Input::new(touch_int, esp_hal::gpio::Pull::Up);
+    text.push_str(&format!(
+        "Battery voltage: {:?}mv",
+        pmu.get_vbus_voltage().unwrap()
+    ));
 
-        let mut touchpad = CST816S::new(i2c, touch_int, NoPin);
-        match touchpad.setup(&mut delay) {
-            Ok(_) => Some(touchpad),
-            Err(_) => {
-                error!("Touchpad setup failed");
-                None
-            }
-        }
-    } else {
-        error!(
-            "Touch device not detected at address 0x{:02X}",
-            CST816_SLAVE_ADDRESS
-        );
-        None
-    };
+    text.push_str(&format!(
+        "Temperature: {:?}",
+        pmu.get_temperature().unwrap()
+    ));
+
+    let touch_int = peripherals.GPIO21;
+    let touch_int = Input::new(touch_int, esp_hal::gpio::Pull::Up);
+
+    let mut touchpad = CST816S::new(RefCellDevice::new(&i2c_ref_cell), touch_int, NoPin);
+    touchpad.setup(&mut delay).expect("touchpad setup failed");
 
     // SPI pins
     let sck = Output::new(peripherals.GPIO47, Level::Low);
@@ -130,6 +149,8 @@ async fn main(_spawner: Spawner) -> ! {
     let di =
         display_interface_spi_dma::new_no_cs(LCD_PIXELS, spi_bus, Output::new(dc_pin, Level::Low));
 
+    detect_spi_model(RefCellDevice::new(&i2c_ref_cell));
+
     let mut display = Builder::new(RM67162, di)
         .orientation(Orientation::default())
         .display_size(DISPLAY_WIDTH, DISPLAY_HEIGHT)
@@ -142,55 +163,51 @@ async fn main(_spawner: Spawner) -> ! {
     let mut x_touch_prev: i32 = 0;
     let mut y_touch_prev: i32 = 0;
 
-    let mut background_color = RgbColor::GREEN;
-    let mut foreground_color = RgbColor::MAGENTA;
-
     loop {
-        if let Some(ref mut touchpad) = touchpad {
-            if let Some(touch_event) = touchpad.read_one_touch_event(true) {
-                match touch_event.gesture {
-                    cst816s::TouchGesture::None => _ = (),
-                    cst816s::TouchGesture::SlideDown => info!("Gesture: Slide Down"),
-                    cst816s::TouchGesture::SlideUp => info!("Gesture: Slide Up"),
-                    cst816s::TouchGesture::SlideLeft => info!("Gesture: Slide Left"),
-                    cst816s::TouchGesture::SlideRight => info!("Gesture: Slide Right"),
-                    cst816s::TouchGesture::SingleClick => info!("Gesture: Single Click"),
-                    cst816s::TouchGesture::DoubleClick => info!("Gesture: Double Click"),
-                    cst816s::TouchGesture::LongPress => info!("Gesture: Long Press"),
-                }
+        if let Some(touch_event) = touchpad.read_one_touch_event(true) {
+            match touch_event.gesture {
+                cst816s::TouchGesture::None => _ = (),
+                cst816s::TouchGesture::SlideDown => info!("Gesture: Slide Down"),
+                cst816s::TouchGesture::SlideUp => info!("Gesture: Slide Up"),
+                cst816s::TouchGesture::SlideLeft => info!("Gesture: Slide Left"),
+                cst816s::TouchGesture::SlideRight => info!("Gesture: Slide Right"),
+                cst816s::TouchGesture::SingleClick => info!("Gesture: Single Click"),
+                cst816s::TouchGesture::DoubleClick => info!("Gesture: Double Click"),
+                cst816s::TouchGesture::LongPress => info!("Gesture: Long Press"),
+            }
 
-                let x_touch = touch_event.x;
-                let y_touch = touch_event.y;
+            let x_touch = touch_event.x;
+            let y_touch = touch_event.y;
 
-                if (x_touch != x_touch_prev) || (y_touch != y_touch_prev) {
-                    info!("Touch event: {} {}", x_touch, y_touch);
+            if (x_touch != x_touch_prev) || (y_touch != y_touch_prev) {
+                info!("Touch event: {} {}", x_touch, y_touch);
 
-                    display
-                        .set_pixel(
-                            DISPLAY_WIDTH - y_touch as u16,
-                            x_touch as u16,
-                            RgbColor::RED,
-                        )
-                        .expect("set_pixel failed");
-                    y_touch_prev = touch_event.y;
-                    x_touch_prev = touch_event.x;
-
-                    let rand_val = rng.random();
-                    background_color = Rgb565::from(RawU16::new(rand_val as u16));
-                    let rand_val = rng.random();
-                    foreground_color = Rgb565::from(RawU16::new(rand_val as u16));
-                }
+                display
+                    .set_pixel(
+                        DISPLAY_WIDTH - y_touch as u16,
+                        x_touch as u16,
+                        RgbColor::GREEN,
+                    )
+                    .expect("set_pixel failed");
+                y_touch_prev = touch_event.y;
+                x_touch_prev = touch_event.x;
             }
         }
 
-        let x_rand = rng.random() as u16 % DISPLAY_WIDTH;
-        let y_rand = rng.random() as u16 % DISPLAY_HEIGHT;
-        display
-            .set_pixel(x_rand, y_rand, foreground_color)
-            .expect("set_pixel failed");
+        let text_box = TextBox::with_textbox_style(
+            text.as_str(),
+            display.bounding_box(),
+            TEXT_STYLE,
+            TEXT_BOX_STYLE,
+        );
+        // Draw the text box.
+        text_box.draw(&mut display).expect("draw failed");
+
+        //let rand_val = rng.random();
+        //background_color = Rgb565::from(RawU16::new(rand_val as u16));
 
         display
-            .set_pixel(x, y, background_color)
+            .set_pixel(x, y, Rgb565::CSS_KHAKI)
             .expect("set_pixel failed");
 
         x += 1;
@@ -203,8 +220,10 @@ async fn main(_spawner: Spawner) -> ! {
         }
     }
 }
-
-fn detect_spi_model(i2c: &mut I2c<Blocking>) {
+fn detect_spi_model<I2C>(mut i2c: I2C)
+where
+    I2C: I2CBus,
+{
     // Try to find 1.91 inch i2c devices
     if i2c.write(0x15, &[]).is_ok() {
         // Check RTC Slave address
@@ -216,24 +235,4 @@ fn detect_spi_model(i2c: &mut I2c<Blocking>) {
     } else {
         error!("Unable to detect 1.91-inch touch board model!");
     }
-}
-
-const SY6970_SLAVE_ADDRESS: u8 = 0x6A;
-const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
-
-fn detect_pmu(i2c: &mut I2c<Blocking>) -> Option<u8> {
-    // Try SY6970
-    if i2c.write(SY6970_SLAVE_ADDRESS, &[]).is_ok() {
-        info!("Detected SY6970 PMU chip");
-        return Some(SY6970_SLAVE_ADDRESS);
-    }
-
-    // Try BQ25896
-    if i2c.write(BQ25896_SLAVE_ADDRESS, &[]).is_ok() {
-        info!("Detected BQ25896 PMU chip");
-        return Some(BQ25896_SLAVE_ADDRESS);
-    }
-
-    // No PMU detected
-    None
 }
