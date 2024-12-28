@@ -44,7 +44,7 @@ where
     I2C: I2c,
 {
     /// Creates a new BQ25896 driver instance
-    /// 
+    ///
     /// # Arguments
     /// * `i2c` - I2C bus instance
     /// * `adr` - I2C device address (typically 0x6B)
@@ -118,33 +118,35 @@ where
         Ok(val != BusStatus::NoInput)
     }
 
-    /// Gets battery voltage in millivolts and thermal regulation status
-    /// Returns tuple of (voltage_mv, thermal_regulation_active)
-    pub fn get_battery_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
+    /// Gets battery voltage in millivolts
+    /// Returns voltage_mv
+    pub fn get_battery_voltage(&mut self) -> Result<u16, PmuSensorError> {
         let data = self.read_register(&[BATV])?;
-        let data = data & 0x7F;
+
         let thermal_regulation = ((data >> 7) & 0x01) != 0;
-        if data == 0 {
-            return Ok((0, thermal_regulation));
+        if thermal_regulation {
+            return Ok(0);
         }
+        let data = data & 0x7F;
         let vbat = (data as u16) * 20 + 2304;
 
-        Ok((vbat, thermal_regulation))
+        Ok(vbat)
     }
 
-    /// Returns the USB voltage and if a USB device is attached
-    /// Gets USB bus voltage in millivolts and attachment status
-    /// Returns tuple of (voltage_mv, usb_attached)
-    pub fn get_vbus_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
+    /// Returns the USB voltage
+    /// Gets USB bus voltage in millivolts
+
+    pub fn get_vbus_voltage(&mut self) -> Result<u16, PmuSensorError> {
         let data = self.read_register(&[VBUSV])?;
-        let data = data & 0x7F;
-        let vbus_attached = ((data >> 7) & 0x01) != 0;
-        if data == 0 {
-            return Ok((0, vbus_attached));
+
+        let vbus_attached = ((data >> 7) & 0x01) == 0;
+        if vbus_attached {
+            return Ok(0);
         }
+        let data = data & 0x7F;
         let vbus = (data as u16) * 100 + 2600;
 
-        Ok((vbus, vbus_attached))
+        Ok(vbus)
     }
 
     /// Gets system voltage in millivolts
@@ -211,7 +213,7 @@ pub enum PmuSensorError {
     Init,
     /// Failed to read from register
     ReadRegister,
-    /// Failed to write to register 
+    /// Failed to write to register
     WriteRegister,
 }
 

@@ -205,12 +205,12 @@ async fn main(_spawner: Spawner) -> ! {
 
         text.push_str(&format!(
             "Battery voltage: {}mv\n",
-            pmu.get_battery_voltage().unwrap().0
+            pmu.get_battery_voltage().unwrap()
         ));
 
         text.push_str(&format!(
             "USB voltage: {}mv\n",
-            pmu.get_vbus_voltage().unwrap().0
+            pmu.get_vbus_voltage().unwrap()
         ));
 
         text.push_str(&format!(

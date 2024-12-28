@@ -32,12 +32,12 @@ Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 
 1. Build the project:
 ```bash
-cargo build --release
+./scripts/build.sh
 ```
 
 2. Flash to device:
 ```bash
-cargo espflash flash --release --monitor
+./scripts/flash.sh
 ```
 
 ## Usage

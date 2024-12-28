@@ -1,8 +1,6 @@
 #!/bin/bash
 
-which idf.py >/dev/null || {
-    source ~/export-esp.sh >/dev/null 2>&1
-}
+source ~/export-esp.sh >/dev/null 2>&1
 
 case "$1" in
 "" | "release")

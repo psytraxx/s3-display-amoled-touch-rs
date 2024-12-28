@@ -2,20 +2,18 @@
 
 set -e
 
+source ~/export-esp.sh >/dev/null 2>&1
+
 BUILD_MODE=""
 case "$1" in
 "" | "release")
-    bash scripts/build.sh
-    BUILD_MODE="release"
+    cargo run --release
     ;;
 "debug")
-    bash scripts/build.sh debug
-    BUILD_MODE="debug"
+     cargo run 
     ;;
 *)
     echo "Wrong argument. Only \"debug\"/\"release\" arguments are supported"
     exit 1
     ;;
 esac
-
-web-flash --chip {{ mcu }} target/{{ rust_target }}/${BUILD_MODE}/{{ crate_name }}
