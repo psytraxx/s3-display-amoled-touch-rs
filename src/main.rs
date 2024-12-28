@@ -9,6 +9,7 @@ use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_time::Delay;
 use embedded_graphics::draw_target::DrawTarget;
+use embedded_graphics::mono_font::iso_8859_1::FONT_10X20 as FONT;
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::prelude::Dimensions;
 use embedded_graphics::Drawable;
@@ -33,7 +34,6 @@ use esp_hal::spi::SpiMode;
 use esp_hal::timer::timg::TimerGroup;
 use mipidsi::options::Orientation;
 use mipidsi::Builder;
-use profont::PROFONT_24_POINT as FONT;
 use rm67162::RM67162;
 use {defmt_rtt as _, esp_backtrace as _};
 
@@ -182,7 +182,18 @@ async fn main(_spawner: Spawner) -> ! {
             }
         }
 
+        let is_vbus_present = pmu.is_vbus_in().unwrap();
+
+        pmu.set_charge_enable(!is_vbus_present)
+            .expect("set_charge_enable failed");
+
+        let is_vbus_present = match is_vbus_present {
+            true => "Yes",
+            false => "No",
+        };
         let mut text = format!("CHG state: {}\n", pmu.get_charge_status().unwrap());
+
+        text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
 
         text.push_str(&format!("Bus state: {}\n", pmu.get_bus_status().unwrap()));
 
@@ -215,7 +226,7 @@ async fn main(_spawner: Spawner) -> ! {
         // Draw the text box.
         text_box.draw(&mut display).expect("draw failed");
 
-        delay.delay_ms(5_000);
+        delay.delay_ms(10_000);
     }
 }
 fn detect_spi_model<I2C>(mut i2c: I2C)

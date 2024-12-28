@@ -14,12 +14,13 @@ pub struct BQ25896<I2C> {
 }
 
 // register addresses
-const VBUSV: u8 = 0x11;
+const ADC_CTRL: u8 = 0x02;
+const SYS_CTRL: u8 = 0x03;
 const BATV: u8 = 0x0E;
 const SYSV: u8 = 0x0F;
-const ADC_CTRL: u8 = 0x02;
 const VBUS_STAT: u8 = 0x0B;
 const TSPCT: u8 = 0x10;
+const VBUSV: u8 = 0x11;
 
 impl<I2C> BQ25896<I2C>
 where
@@ -58,7 +59,7 @@ where
         let mut data = self.read_register(&[ADC_CTRL])?;
         data |= 1 << 7; // Start ADC conversion
         data |= 1 << 6; // Set continuous conversion
-        self.write_register(0x02, data)
+        self.write_register(ADC_CTRL, data)
     }
 
     pub fn get_chip_id(&mut self) -> Result<u8, PmuSensorError> {
@@ -72,21 +73,41 @@ where
         Ok(result.into())
     }
 
+    pub fn set_charge_enable(&mut self, enabled: bool) -> Result<(), PmuSensorError> {
+        let mut data = self.read_register(&[SYS_CTRL])?;
+
+        match enabled {
+            false => data &= !(1 << 4),
+            true => data |= 1 << 4,
+        }
+
+        self.write_register(SYS_CTRL, data)
+    }
+
     pub fn get_bus_status(&mut self) -> Result<BusStatus, PmuSensorError> {
         let val = self.read_register(&[VBUS_STAT])?;
         let result = (val >> 5) & 0x07;
         Ok(result.into())
     }
 
+    pub fn is_vbus_in(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.get_bus_status()?;
+        Ok(val != BusStatus::NoInput)
+    }
+
     pub fn get_battery_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
         let data = self.read_register(&[BATV])?;
         let data = data & 0x7F;
+        let thermal_regulation = ((data >> 7) & 0x01) != 0;
+        if data == 0 {
+            return Ok((0, thermal_regulation));
+        }
         let vbat = (data as u16) * 20 + 2304;
 
-        let thermal_regulation = ((data >> 7) & 0x01) != 0;
         Ok((vbat, thermal_regulation))
     }
 
+    /// Returns the USB voltage and if a USB device is attached
     pub fn get_vbus_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
         let data = self.read_register(&[VBUSV])?;
         let data = data & 0x7F;
@@ -102,6 +123,9 @@ where
     pub fn get_sys_voltage(&mut self) -> Result<u16, PmuSensorError> {
         let data = self.read_register(&[SYSV])?;
         let data = data & 0x7F;
+        if data == 0 {
+            return Ok(0);
+        }
         let vsys = (data as u16) * 20 + 2304;
 
         Ok(vsys)
@@ -182,9 +206,9 @@ impl From<u8> for BusStatus {
     fn from(val: u8) -> Self {
         match val {
             0 => BusStatus::NoInput,
-            1 => BusStatus::UsbSdp,
-            2 => BusStatus::Adapter,
-            3 => BusStatus::Otg,
+            1 => BusStatus::UsbSdp,  // Standard USB port (500mA max)
+            2 => BusStatus::Adapter, // AC/DC power adapter
+            3 => BusStatus::Otg,     // On-The-Go -it powers other devices on usb
             _ => BusStatus::Unknown,
         }
     }
