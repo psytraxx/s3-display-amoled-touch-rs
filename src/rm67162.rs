@@ -73,23 +73,30 @@ static const DisplayConfigure_t RM67162_AMOLED_SPI  = {
     bool fullRefresh;
 } DisplayConfigure_t; */
 
+/// Commands used to initialize the RM67162 AMOLED display controller
+/// Derived from LilyGo reference implementation
+
 // Define a structure for the LCD command
 struct LcdCommand<'a> {
-    addr: u8,                 // Command address
-    params: &'a [u8],         // Command parameters
-    delay_after: Option<u32>, // Delay in milliseconds after sending the command
+    /// Command address/opcode
+    addr: u8,
+    /// Command parameters
+    params: &'a [u8],
+    /// Optional delay after command in milliseconds
+    delay_after: Option<u32>,
 }
 
-const RM67162_MADCTL_MY: i32 = 0x80;
-const RM67162_MADCTL_MX: i32 = 0x40;
-const RM67162_MADCTL_MV: i32 = 0x20;
-//const RM67162_MADCTL_ML: i32 = 0x10;
-const RM67162_MADCTL_RGB: i32 = 0x00;
-//const RM67162_MADCTL_MH: i32 = 0x04;
-//const RM67162_MADCTL_BGR: i32 = 0x08;
-const LCD_CMD_MADCTL: u8 = 0x36; // Memory data access control
+/// Memory Access Control (MADCTL) register bits
+const RM67162_MADCTL_MY: i32 = 0x80; // Row address order
+const RM67162_MADCTL_MX: i32 = 0x40; // Column address order
+const RM67162_MADCTL_MV: i32 = 0x20; // Row/Column exchange
+const RM67162_MADCTL_RGB: i32 = 0x00; // RGB color order
 
-// AMOLED initialization commands
+/// Memory Data Access Control register
+const LCD_CMD_MADCTL: u8 = 0x36;
+
+/// Display initialization command sequence
+/// Sets up display parameters, power settings and enables the display
 const AMOLED_INIT_CMDS: &[LcdCommand] = &[
     /*const lcd_cmd_t rm67162_spi_cmd[RM67162_INIT_SPI_SEQUENCE_LENGTH] = {
         {0xFE, {0x04}, 0x01}, //SET APGE3
@@ -204,7 +211,11 @@ const AMOLED_INIT_CMDS: &[LcdCommand] = &[
     }, // Display ON with 120ms delay
 ];
 
-/// RM67162 display in Rgb565 color mode.
+/// RM67162 AMOLED display driver implementation
+/// Supports:
+/// - 16-bit RGB565 color
+/// - 240x536 resolution
+/// - SPI interface with DMA
 pub struct RM67162;
 
 impl Model for RM67162 {
@@ -265,6 +276,7 @@ impl Model for RM67162 {
     }
 }
 
+/// Configures display orientation based on rotation settings
 fn madctl_from_options(options: &ModelOptions) -> i32 {
     match options.orientation.rotation {
         Rotation::Deg0 => RM67162_MADCTL_RGB, //ok

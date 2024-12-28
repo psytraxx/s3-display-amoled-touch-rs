@@ -8,24 +8,46 @@ use libm::{log, round};
 /// https://github.com/andhieSetyabudi/BQ25896/blob/master/BQ25896.h
 /// https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series/blob/master/libdeps/XPowersLib/src/PowersBQ25896.tpp
 ///
+/// BQ25896 battery charging and power path management IC driver.
+/// Provides battery charging control, system power path management,
+/// and monitoring capabilities.
+///
+/// # Features
+/// - Battery voltage monitoring
+/// - System voltage monitoring
+/// - USB/adapter input detection
+/// - Temperature monitoring
+/// - Charge status reporting
 pub struct BQ25896<I2C> {
     i2c: I2C,
     adr: u8,
 }
 
-// register addresses
+// Register address constants with documentation
+/// ADC control register - enables ADC features
 const ADC_CTRL: u8 = 0x02;
+/// System control register - charge enable/disable
 const SYS_CTRL: u8 = 0x03;
+/// Battery voltage register
 const BATV: u8 = 0x0E;
+/// System voltage register  
 const SYSV: u8 = 0x0F;
+/// Bus status register - input source detection
 const VBUS_STAT: u8 = 0x0B;
+/// Temperature register - NTC readings
 const TSPCT: u8 = 0x10;
+/// USB bus voltage register
 const VBUSV: u8 = 0x11;
 
 impl<I2C> BQ25896<I2C>
 where
     I2C: I2c,
 {
+    /// Creates a new BQ25896 driver instance
+    /// 
+    /// # Arguments
+    /// * `i2c` - I2C bus instance
+    /// * `adr` - I2C device address (typically 0x6B)
     pub fn new(i2c: I2C, adr: u8) -> Result<Self, PmuSensorError> {
         let mut instance = Self { i2c, adr };
         instance.detect_pmu(adr)?;
@@ -55,6 +77,7 @@ where
             .map_err(|_| PmuSensorError::WriteRegister)
     }
 
+    /// Enables ADC conversion for voltage and current monitoring
     pub fn set_adc_enabled(&mut self) -> Result<(), PmuSensorError> {
         let mut data = self.read_register(&[ADC_CTRL])?;
         data |= 1 << 7; // Start ADC conversion
@@ -95,6 +118,8 @@ where
         Ok(val != BusStatus::NoInput)
     }
 
+    /// Gets battery voltage in millivolts and thermal regulation status
+    /// Returns tuple of (voltage_mv, thermal_regulation_active)
     pub fn get_battery_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
         let data = self.read_register(&[BATV])?;
         let data = data & 0x7F;
@@ -108,6 +133,8 @@ where
     }
 
     /// Returns the USB voltage and if a USB device is attached
+    /// Gets USB bus voltage in millivolts and attachment status
+    /// Returns tuple of (voltage_mv, usb_attached)
     pub fn get_vbus_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
         let data = self.read_register(&[VBUSV])?;
         let data = data & 0x7F;
@@ -120,6 +147,7 @@ where
         Ok((vbus, vbus_attached))
     }
 
+    /// Gets system voltage in millivolts
     pub fn get_sys_voltage(&mut self) -> Result<u16, PmuSensorError> {
         let data = self.read_register(&[SYSV])?;
         let data = data & 0x7F;
@@ -131,6 +159,8 @@ where
         Ok(vsys)
     }
 
+    /// Converts NTC thermistor resistance ratio to temperature
+    /// using Steinhart-Hart equation
     fn r_to_temp(&self, r: f64) -> f64 {
         const BETA: f64 = 3950.0; // Beta value for typical 10k NTC
         const T0: f64 = 298.15; // 25°C in Kelvin
@@ -147,6 +177,7 @@ where
         round(temp_celsius * 2.0) / 2.0
     }
 
+    /// Gets battery temperature in Celsius from NTC thermistor
     pub fn get_temperature(&mut self) -> Result<f64, PmuSensorError> {
         let data = self.read_register(&[TSPCT])?;
         let data = data & 0x7F;
@@ -173,20 +204,29 @@ where
     }*/
 }
 
-/// A clock error
+/// Errors that can occur when interacting with the BQ25896
 #[derive(Debug, Format)]
 pub enum PmuSensorError {
+    /// Failed to initialize the device
     Init,
+    /// Failed to read from register
     ReadRegister,
+    /// Failed to write to register 
     WriteRegister,
 }
 
+/// Status of the power input source
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BusStatus {
+    /// No power input connected
     NoInput,
+    /// Standard USB host (500mA max)
     UsbSdp,
+    /// AC/DC power adapter
     Adapter,
+    /// USB OTG mode - device is power source
     Otg,
+    /// Unknown input status
     Unknown,
 }
 

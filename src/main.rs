@@ -44,17 +44,23 @@ mod bq25896;
 mod rm67162;
 
 pub const DISPLAY_HEIGHT: u16 = 536;
+
+/// Display resolution width in pixels
 pub const DISPLAY_WIDTH: u16 = 240;
 
+/// Total number of pixels in display
 pub const LCD_PIXELS: usize = (DISPLAY_HEIGHT as usize) * (DISPLAY_WIDTH as usize);
 
+/// Default text box style settings
 const TEXT_BOX_STYLE: TextBoxStyle = TextBoxStyleBuilder::new()
     .height_mode(HeightMode::FitToText)
     .alignment(HorizontalAlignment::Justified)
     .build();
 
+/// Default text rendering style
 const TEXT_STYLE: MonoTextStyle<Rgb565> = MonoTextStyle::new(&FONT, Rgb565::WHITE);
 
+/// I2C address of BQ25896 PMU
 const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
 
 #[main]
@@ -229,6 +235,9 @@ async fn main(_spawner: Spawner) -> ! {
         delay.delay_ms(10_000);
     }
 }
+
+/// Detects the display board model by probing I2C addresses
+/// Supports 1.91" SPI and QSPI variants
 fn detect_spi_model<I2C>(mut i2c: I2C)
 where
     I2C: I2CBus,
@@ -246,7 +255,8 @@ where
     }
 }
 
-// Current implementation could be more efficient:
+/// Generates a dark RGB565 color from random value
+/// Used for background color cycling
 fn generate_dark_color(rand_val: u32) -> Rgb565 {
     let r = (rand_val & 0x07) as u8;
     let g = ((rand_val >> 3) & 0x07) as u8;
