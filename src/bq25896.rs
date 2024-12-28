@@ -1,6 +1,6 @@
 use core::fmt::{self, Display, Formatter};
 
-use defmt::Format;
+use defmt::{debug, Format};
 use embedded_hal::i2c::I2c;
 use libm::{log, round};
 
@@ -28,6 +28,8 @@ pub struct BQ25896<I2C> {
 const ADC_CTRL: u8 = 0x02;
 /// System control register - charge enable/disable
 const SYS_CTRL: u8 = 0x03;
+// Charge current control register
+const ICHG: u8 = 0x04;
 /// Battery voltage register
 const BATV: u8 = 0x0E;
 /// System voltage register  
@@ -121,9 +123,13 @@ where
     /// Gets battery voltage in millivolts
     /// Returns voltage_mv
     pub fn get_battery_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let data = self.read_register(&[BATV])?;
-
+        let data: u8 = self.read_register(&[BATV])?;
+        debug!("Battery voltage: {}", data);
+        if data == 0 {
+            return Ok(0);
+        }
         let thermal_regulation = ((data >> 7) & 0x01) != 0;
+        debug!("Thermal regulation: {}", thermal_regulation);
         if thermal_regulation {
             return Ok(0);
         }
@@ -135,7 +141,6 @@ where
 
     /// Returns the USB voltage
     /// Gets USB bus voltage in millivolts
-
     pub fn get_vbus_voltage(&mut self) -> Result<u16, PmuSensorError> {
         let data = self.read_register(&[VBUSV])?;
 
@@ -191,19 +196,29 @@ where
         Ok(self.r_to_temp(r_ratio))
     }
 
-    /*pub fn set_min_vbus(&mut self, voltage: f32) -> Result<(), PmuSensorError> {
-        let voltage = if voltage > 2.6 { voltage - 2.6 } else { 0.0 };
-        let data = (voltage * 10.0) as u8;
-        self.write_register(0x0D, data)
+    /// Gets the fast charge current limit in mA
+    pub fn get_fast_charge_current_limit(&mut self) -> Result<u16, PmuSensorError> {
+        let data = self.read_register(&[ICHG])?;
+
+        let data = data & 0x7F;
+        let val = (data as u16) * 64;
+
+        Ok(val)
     }
 
-    pub fn set_fast_charge_current_limit(&mut self, current: f32) -> Result<(), PmuSensorError> {
-        const POWERS_PPM_REG_04H: u8 = 0x04;
-        let mut data = self.read_register(&[POWERS_PPM_REG_04H])?;
-        let current = (current / 0.064).min(127.0) as u8;
-        data = (data & 0x80) | current;
-        self.write_register(0x04, data)
-    }*/
+    pub fn set_fast_charge_current_limit(&mut self, current: u16) -> Result<(), PmuSensorError> {
+        const CHARGE_STEP: u16 = 64;
+        if current % CHARGE_STEP != 0 {
+            return Err(PmuSensorError::CurrentChargeStepLimitInvalid);
+        }
+        if current > 3008 {
+            return Err(PmuSensorError::CurrentChargeLimitExceeded);
+        }
+        let mut val = self.read_register(&[ICHG])?;
+        val &= 0x80;
+        val |= (current / CHARGE_STEP) as u8;
+        self.write_register(ICHG, val)
+    }
 }
 
 /// Errors that can occur when interacting with the BQ25896
@@ -215,6 +230,10 @@ pub enum PmuSensorError {
     ReadRegister,
     /// Failed to write to register
     WriteRegister,
+    /// Fast charge current limit exceeded
+    CurrentChargeLimitExceeded,
+    // Invalid charge step limit (must be multiple of 64)
+    CurrentChargeStepLimitInvalid,
 }
 
 /// Status of the power input source

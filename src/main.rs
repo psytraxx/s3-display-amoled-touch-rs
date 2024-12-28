@@ -96,6 +96,9 @@ async fn main(_spawner: Spawner) -> ! {
 
     pmu.set_adc_enabled().expect("set_adc_enabled failed");
 
+    pmu.set_fast_charge_current_limit(2048)
+        .expect("set_fast_charge_current_limit failed");
+
     info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
 
     // initalize touchpad
@@ -221,6 +224,11 @@ async fn main(_spawner: Spawner) -> ! {
         text.push_str(&format!(
             "Temperature: {}°C\n",
             pmu.get_temperature().unwrap()
+        ));
+
+        text.push_str(&format!(
+            "Fast charge current limit: {}mv\n",
+            pmu.get_fast_charge_current_limit().unwrap()
         ));
 
         let text_box = TextBox::with_textbox_style(
