@@ -182,9 +182,9 @@ async fn main(_spawner: Spawner) -> ! {
             }
         }
 
-        let mut text = format!("CHG state: {:?}\n", pmu.get_charge_status().unwrap());
+        let mut text = format!("CHG state: {}\n", pmu.get_charge_status().unwrap());
 
-        text.push_str(&format!("Bus state: {:?}\n", pmu.get_bus_status().unwrap()));
+        text.push_str(&format!("Bus state: {}\n", pmu.get_bus_status().unwrap()));
 
         text.push_str(&format!(
             "Battery voltage: {}mv\n",
@@ -235,12 +235,10 @@ where
     }
 }
 
-// Add this function before the main loop:
+// Current implementation could be more efficient:
 fn generate_dark_color(rand_val: u32) -> Rgb565 {
-    // Limit each color component to lower 2-3 bits for darkness
-    let r = (rand_val & 0b00000111) as u8; // 3 bits for red
-    let g = ((rand_val >> 3) & 0b00000111) as u8; // 3 bits for green
-    let b = ((rand_val >> 6) & 0b00000011) as u8; // 2 bits for blue
-
-    Rgb565::new(r, g, b)
+    let r = (rand_val & 0x07) as u8;
+    let g = ((rand_val >> 3) & 0x07) as u8;
+    let b = ((rand_val >> 6) & 0x03) as u8;
+    Rgb565::new(r << 2, g << 2, b << 3) // Scale values for better distribution
 }

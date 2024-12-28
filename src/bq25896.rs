@@ -1,4 +1,6 @@
-use defmt::{info, Format};
+use core::fmt::{self, Display, Formatter};
+
+use defmt::Format;
 use embedded_hal::i2c::I2c;
 use libm::{log, round};
 
@@ -125,10 +127,10 @@ where
         let data = self.read_register(&[TSPCT])?;
         let data = data & 0x7F;
         let ntc_percent = (data as f64) * 0.465_f64 + 21_f64;
-        info!("NTC percent: {}", ntc_percent);
+
         // Convert percentage to resistance ratio
         let r_ratio = (100.0 - ntc_percent) / ntc_percent;
-        info!("r_ratio: {}", r_ratio);
+
         Ok(self.r_to_temp(r_ratio))
     }
 
@@ -155,13 +157,25 @@ pub enum PmuSensorError {
     WriteRegister,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Format)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BusStatus {
     NoInput,
     UsbSdp,
     Adapter,
     Otg,
     Unknown,
+}
+
+impl Display for BusStatus {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            BusStatus::NoInput => write!(f, "No input"),
+            BusStatus::UsbSdp => write!(f, "USB Host SDP"),
+            BusStatus::Adapter => write!(f, "Adapter"),
+            BusStatus::Otg => write!(f, "OTG"),
+            BusStatus::Unknown => write!(f, "Unknown"),
+        }
+    }
 }
 
 impl From<u8> for BusStatus {
@@ -176,13 +190,25 @@ impl From<u8> for BusStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Format)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ChargeStatus {
     NoCharge,
     PreCharge,
     FastCharge,
     Done,
     Unknown,
+}
+
+impl Display for ChargeStatus {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            ChargeStatus::NoCharge => write!(f, "Not charging"),
+            ChargeStatus::PreCharge => write!(f, "Pre-charge"),
+            ChargeStatus::FastCharge => write!(f, "Fast charging"),
+            ChargeStatus::Done => write!(f, "Charge Termination Done"),
+            ChargeStatus::Unknown => write!(f, "Unknown"),
+        }
+    }
 }
 
 impl From<u8> for ChargeStatus {
