@@ -8,13 +8,13 @@ use cst816s::CST816S;
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_time::Delay;
-use embedded_graphics::mono_font::iso_8859_1::FONT_10X20 as FONT;
+use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::mono_font::MonoTextStyle;
-//use embedded_graphics::pixelcolor::raw::RawU16;
-use embedded_graphics::prelude::{Dimensions, WebColors};
+use embedded_graphics::prelude::Dimensions;
 use embedded_graphics::Drawable;
 use embedded_graphics_core::pixelcolor::Rgb565;
 use embedded_graphics_core::prelude::RgbColor;
+use embedded_hal::delay::DelayNs;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::RefCellDevice;
 use embedded_text::alignment::HorizontalAlignment;
@@ -26,15 +26,17 @@ use esp_hal::dma::{Dma, DmaPriority};
 use esp_hal::gpio::{Input, Level, NoPin, Output};
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
-//use esp_hal::rng::Rng;
+use esp_hal::rng::Rng;
 use esp_hal::spi::master::Config;
 use esp_hal::spi::master::Spi;
 use esp_hal::spi::SpiMode;
 use esp_hal::timer::timg::TimerGroup;
 use mipidsi::options::Orientation;
 use mipidsi::Builder;
+use profont::PROFONT_24_POINT as FONT;
 use rm67162::RM67162;
 use {defmt_rtt as _, esp_backtrace as _};
+
 #[macro_use]
 extern crate alloc;
 
@@ -67,7 +69,7 @@ async fn main(_spawner: Spawner) -> ! {
         config
     });
 
-    //let mut rng = Rng::new(peripherals.RNG);
+    let mut rng = Rng::new(peripherals.RNG);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
 
@@ -84,27 +86,26 @@ async fn main(_spawner: Spawner) -> ! {
     let mut pmu = BQ25896::new(RefCellDevice::new(&i2c_ref_cell), BQ25896_SLAVE_ADDRESS)
         .expect("BQ25896 init failed");
 
-    info!("PMU chip id: {}", pmu.get_chip_id());
+    pmu.set_adc_enabled().expect("set_adc_enabled failed");
 
-    let mut text = format!("PMU charge status: {:?}", pmu.get_charge_status().unwrap());
+    info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
+
+    let mut text = format!("CHG state: {:?}\n", pmu.get_charge_status().unwrap());
+
+    text.push_str(&format!("Bus state: {:?}\n", pmu.get_bus_status().unwrap()));
 
     text.push_str(&format!(
-        "PMU bus status: {:?}",
-        pmu.get_bus_status().unwrap()
+        "VBus voltage: {}mv\n",
+        pmu.get_battery_voltage().unwrap().0
     ));
 
     text.push_str(&format!(
-        "VBus voltage: {:?}mv",
-        pmu.get_battery_voltage().unwrap()
+        "USB voltage: {}mv\n",
+        pmu.get_vbus_voltage().unwrap().0
     ));
 
     text.push_str(&format!(
-        "Battery voltage: {:?}mv",
-        pmu.get_vbus_voltage().unwrap()
-    ));
-
-    text.push_str(&format!(
-        "Temperature: {:?}",
+        "Temperature: {}\n",
         pmu.get_temperature().unwrap()
     ));
 
@@ -152,18 +153,23 @@ async fn main(_spawner: Spawner) -> ! {
     detect_spi_model(RefCellDevice::new(&i2c_ref_cell));
 
     let mut display = Builder::new(RM67162, di)
-        .orientation(Orientation::default())
+        .orientation(Orientation {
+            rotation: mipidsi::options::Rotation::Deg90,
+            mirrored: false,
+        })
         .display_size(DISPLAY_WIDTH, DISPLAY_HEIGHT)
         .reset_pin(Output::new(rst_pin, Level::High))
         .init(&mut delay)
         .unwrap();
 
-    let mut x: u16 = 0;
-    let mut y: u16 = 0;
     let mut x_touch_prev: i32 = 0;
     let mut y_touch_prev: i32 = 0;
 
     loop {
+        let rand_val = rng.random();
+        let background_color = generate_dark_color(rand_val);
+        display.clear(background_color).expect("clear failed");
+
         if let Some(touch_event) = touchpad.read_one_touch_event(true) {
             match touch_event.gesture {
                 cst816s::TouchGesture::None => _ = (),
@@ -186,7 +192,7 @@ async fn main(_spawner: Spawner) -> ! {
                     .set_pixel(
                         DISPLAY_WIDTH - y_touch as u16,
                         x_touch as u16,
-                        RgbColor::GREEN,
+                        RgbColor::WHITE,
                     )
                     .expect("set_pixel failed");
                 y_touch_prev = touch_event.y;
@@ -203,21 +209,7 @@ async fn main(_spawner: Spawner) -> ! {
         // Draw the text box.
         text_box.draw(&mut display).expect("draw failed");
 
-        //let rand_val = rng.random();
-        //background_color = Rgb565::from(RawU16::new(rand_val as u16));
-
-        display
-            .set_pixel(x, y, Rgb565::CSS_KHAKI)
-            .expect("set_pixel failed");
-
-        x += 1;
-        if x >= DISPLAY_WIDTH {
-            x = 0;
-            y += 1;
-            if y >= DISPLAY_HEIGHT {
-                y = 0;
-            }
-        }
+        delay.delay_ms(5_000);
     }
 }
 fn detect_spi_model<I2C>(mut i2c: I2C)
@@ -235,4 +227,14 @@ where
     } else {
         error!("Unable to detect 1.91-inch touch board model!");
     }
+}
+
+// Add this function before the main loop:
+fn generate_dark_color(rand_val: u32) -> Rgb565 {
+    // Limit each color component to lower 2-3 bits for darkness
+    let r = (rand_val & 0b00000111) as u8; // 3 bits for red
+    let g = ((rand_val >> 3) & 0b00000111) as u8; // 3 bits for green
+    let b = ((rand_val >> 6) & 0b00000011) as u8; // 2 bits for blue
+
+    Rgb565::new(r, g, b)
 }

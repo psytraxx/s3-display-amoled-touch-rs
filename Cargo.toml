@@ -1,5 +1,5 @@
 [package]
-name = "s3-display-touch-spi-rs"
+name = "s3-display-amoled-touch-rs"
 version = "0.1.0"
 edition = "2021"
 
@@ -40,6 +40,7 @@ embassy-time = { version = "0.3.1", features = ["defmt"] }
 embedded-hal-bus = { version = "0.2.0", features = ["defmt-03"] }
 critical-section = "1.2.0"
 libm = "0.2.11"
+profont = "0.7.0"
 
 
 [profile.dev]

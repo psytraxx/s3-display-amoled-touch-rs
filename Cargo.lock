@@ -1093,6 +1093,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "profont"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "016681370a9dd6e7ddb4c1a959922fd59dc45e5ebaa5ff5b13090267898ced34"
+dependencies = [
+ "embedded-graphics",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1167,7 +1176,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7c45b9784283f1b2e7fb61b42047c2fd678ef0960d4f6f1eba131594cc369d4"
 
 [[package]]
-name = "s3-display-touch-spi-rs"
+name = "s3-display-amoled-touch-rs"
 version = "0.1.0"
 dependencies = [
  "critical-section",
@@ -1190,6 +1199,7 @@ dependencies = [
  "esp-hal-embassy",
  "libm",
  "mipidsi",
+ "profont",
 ]
 
 [[package]]

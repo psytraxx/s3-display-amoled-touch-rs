@@ -3,6 +3,8 @@ use embedded_hal::i2c::I2c;
 use libm::log;
 
 /// Handles all operations on/with Mpu6050
+/// https://github.com/andhieSetyabudi/BQ25896/blob/master/BQ25896.h
+///
 pub struct BQ25896<I2C> {
     i2c: I2C,
     adr: u8,
@@ -22,7 +24,7 @@ where
         if self.i2c.write(adr, &[]).is_ok() {
             Ok(())
         } else {
-            Err(PmuSensorError::InitError)
+            Err(PmuSensorError::Init)
         }
     }
 
@@ -31,8 +33,22 @@ where
 
         self.i2c
             .write_read(self.adr, reg, &mut buffer)
-            .map_err(|_| PmuSensorError::ReadRegisterError)?;
+            .map_err(|_| PmuSensorError::ReadRegister)?;
         Ok(buffer[0])
+    }
+
+    fn write_register(&mut self, reg: u8, data: u8) -> Result<(), PmuSensorError> {
+        self.i2c
+            .write(self.adr, &[reg, data])
+            .map_err(|_| PmuSensorError::WriteRegister)
+    }
+
+    pub fn set_adc_enabled(&mut self) -> Result<(), PmuSensorError> {
+        const POWERS_PPM_REG_02H: u8 = 0x02;
+        let mut data = self.read_register(&[POWERS_PPM_REG_02H])?;
+        data |= 1 << 7; // Start ADC conversion
+        data |= 1 << 6; // Set continuous conversion
+        self.write_register(0x02, data)
     }
 
     pub fn get_chip_id(&mut self) -> Result<u8, PmuSensorError> {
@@ -54,30 +70,36 @@ where
         Ok(result.into())
     }
 
-    pub fn get_battery_voltage(&mut self) -> Result<f32, PmuSensorError> {
+    pub fn get_battery_voltage(&mut self) -> Result<(f32, bool), PmuSensorError> {
         const POWERS_PPM_REG_0EH: u8 = 0x0E;
 
-        let data = self.read_register(&[POWERS_PPM_REG_0EH])?;
-        let vbat = (data & 0x7F) as f32 * 0.02 + 2.304;
-        Ok(vbat)
+        let mut data = self.read_register(&[POWERS_PPM_REG_0EH])?;
+        let thermal_regulation = ((data >> 7) & 0x01) != 0;
+        data &= !(1 << 7);
+
+        let mut vbat = data as f32 * 0.02;
+        vbat += 2.304;
+        Ok((vbat, thermal_regulation))
     }
 
-    pub fn get_vbus_voltage(&mut self) -> Result<f32, PmuSensorError> {
+    pub fn get_vbus_voltage(&mut self) -> Result<(f32, bool), PmuSensorError> {
         const POWERS_PPM_REG_11H: u8 = 0x11;
-        let data = self.read_register(&[POWERS_PPM_REG_11H])?;
-        let vbus_attached = (data >> 7) & 0x01 == 1;
-        let vbus = 2.6 + (data & 0x7F) as f32 * 0.1;
-        if vbus_attached {
-            Ok(vbus)
-        } else {
-            Ok(0.0)
-        }
+        let mut data = self.read_register(&[POWERS_PPM_REG_11H])?;
+        let vbus_attached = ((data >> 7) & 0x01) != 0;
+        data &= !(1 << 7);
+        let mut vbus = 2.6;
+        vbus += data as f32 * 0.1;
+
+        Ok((vbus, vbus_attached))
     }
 
     fn r_to_temp(&self, r: f64) -> f64 {
-        let temperature = r / 10000.0;
-        let temperature = log(temperature) / 3950.0 + 1.0 / 298.15;
-        1.0 / temperature - 273.15
+        let mut temperature = r / 10000.0;
+        temperature = log(temperature);
+        temperature /= 3950.0;
+        temperature += 1.0 / 298.15;
+        temperature = 1.0 / temperature;
+        temperature - 273.25
     }
 
     pub fn get_temperature(&mut self) -> Result<f64, PmuSensorError> {
@@ -88,13 +110,28 @@ where
         let ntc = (rp * 30100.0) / (30100.0 - rp);
         Ok(self.r_to_temp(ntc))
     }
+
+    /*pub fn set_min_vbus(&mut self, voltage: f32) -> Result<(), PmuSensorError> {
+        let voltage = if voltage > 2.6 { voltage - 2.6 } else { 0.0 };
+        let data = (voltage * 10.0) as u8;
+        self.write_register(0x0D, data)
+    }
+
+    pub fn set_fast_charge_current_limit(&mut self, current: f32) -> Result<(), PmuSensorError> {
+        const POWERS_PPM_REG_04H: u8 = 0x04;
+        let mut data = self.read_register(&[POWERS_PPM_REG_04H])?;
+        let current = (current / 0.064).min(127.0) as u8;
+        data = (data & 0x80) | current;
+        self.write_register(0x04, data)
+    }*/
 }
 
 /// A clock error
 #[derive(Debug, Format)]
 pub enum PmuSensorError {
-    InitError,
-    ReadRegisterError,
+    Init,
+    ReadRegister,
+    WriteRegister,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Format)]
