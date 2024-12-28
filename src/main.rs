@@ -77,12 +77,14 @@ async fn main(_spawner: Spawner) -> ! {
 
     psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
+    // initalize i2c bus
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
         .with_sda(peripherals.GPIO3)
         .with_scl(peripherals.GPIO2);
 
     let i2c_ref_cell = RefCell::new(i2c);
 
+    // initalize bq25896 charger
     let mut pmu = BQ25896::new(RefCellDevice::new(&i2c_ref_cell), BQ25896_SLAVE_ADDRESS)
         .expect("BQ25896 init failed");
 
@@ -90,32 +92,14 @@ async fn main(_spawner: Spawner) -> ! {
 
     info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
 
-    let mut text = format!("CHG state: {:?}\n", pmu.get_charge_status().unwrap());
-
-    text.push_str(&format!("Bus state: {:?}\n", pmu.get_bus_status().unwrap()));
-
-    text.push_str(&format!(
-        "VBus voltage: {}mv\n",
-        pmu.get_battery_voltage().unwrap().0
-    ));
-
-    text.push_str(&format!(
-        "USB voltage: {}mv\n",
-        pmu.get_vbus_voltage().unwrap().0
-    ));
-
-    text.push_str(&format!(
-        "Temperature: {}\n",
-        pmu.get_temperature().unwrap()
-    ));
-
+    // initalize touchpad
     let touch_int = peripherals.GPIO21;
     let touch_int = Input::new(touch_int, esp_hal::gpio::Pull::Up);
 
     let mut touchpad = CST816S::new(RefCellDevice::new(&i2c_ref_cell), touch_int, NoPin);
     touchpad.setup(&mut delay).expect("touchpad setup failed");
 
-    // SPI pins
+    // initialize display
     let sck = Output::new(peripherals.GPIO47, Level::Low);
     let mosi = Output::new(peripherals.GPIO18, Level::Low);
     let cs = Output::new(peripherals.GPIO6, Level::High);
@@ -129,7 +113,6 @@ async fn main(_spawner: Spawner) -> ! {
     let dma = Dma::new(peripherals.DMA);
     let dma_channel = dma.channel0;
 
-    // Configure SPI
     let spi_bus = Spi::new_with_config(
         peripherals.SPI2,
         Config {
@@ -146,7 +129,6 @@ async fn main(_spawner: Spawner) -> ! {
     let dc_pin = peripherals.GPIO7;
     let rst_pin = peripherals.GPIO17;
 
-    // Initialize the display
     let di =
         display_interface_spi_dma::new_no_cs(LCD_PIXELS, spi_bus, Output::new(dc_pin, Level::Low));
 
@@ -199,6 +181,30 @@ async fn main(_spawner: Spawner) -> ! {
                 x_touch_prev = touch_event.x;
             }
         }
+
+        let mut text = format!("CHG state: {:?}\n", pmu.get_charge_status().unwrap());
+
+        text.push_str(&format!("Bus state: {:?}\n", pmu.get_bus_status().unwrap()));
+
+        text.push_str(&format!(
+            "Battery voltage: {}mv\n",
+            pmu.get_battery_voltage().unwrap().0
+        ));
+
+        text.push_str(&format!(
+            "USB voltage: {}mv\n",
+            pmu.get_vbus_voltage().unwrap().0
+        ));
+
+        text.push_str(&format!(
+            "SYS voltage: {}mv\n",
+            pmu.get_sys_voltage().unwrap()
+        ));
+
+        text.push_str(&format!(
+            "Temperature: {}°C\n",
+            pmu.get_temperature().unwrap()
+        ));
 
         let text_box = TextBox::with_textbox_style(
             text.as_str(),

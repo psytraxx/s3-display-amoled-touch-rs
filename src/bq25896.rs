@@ -1,14 +1,23 @@
-use defmt::Format;
+use defmt::{info, Format};
 use embedded_hal::i2c::I2c;
-use libm::log;
+use libm::{log, round};
 
 /// Handles all operations on/with Mpu6050
 /// https://github.com/andhieSetyabudi/BQ25896/blob/master/BQ25896.h
+/// https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series/blob/master/libdeps/XPowersLib/src/PowersBQ25896.tpp
 ///
 pub struct BQ25896<I2C> {
     i2c: I2C,
     adr: u8,
 }
+
+// register addresses
+const VBUSV: u8 = 0x11;
+const BATV: u8 = 0x0E;
+const SYSV: u8 = 0x0F;
+const ADC_CTRL: u8 = 0x02;
+const VBUS_STAT: u8 = 0x0B;
+const TSPCT: u8 = 0x10;
 
 impl<I2C> BQ25896<I2C>
 where
@@ -44,8 +53,7 @@ where
     }
 
     pub fn set_adc_enabled(&mut self) -> Result<(), PmuSensorError> {
-        const POWERS_PPM_REG_02H: u8 = 0x02;
-        let mut data = self.read_register(&[POWERS_PPM_REG_02H])?;
+        let mut data = self.read_register(&[ADC_CTRL])?;
         data |= 1 << 7; // Start ADC conversion
         data |= 1 << 6; // Set continuous conversion
         self.write_register(0x02, data)
@@ -57,58 +65,71 @@ where
     }
 
     pub fn get_charge_status(&mut self) -> Result<ChargeStatus, PmuSensorError> {
-        const POWERS_PPM_REG_0BH: u8 = 0x0B;
-        let val = self.read_register(&[POWERS_PPM_REG_0BH])?;
+        let val = self.read_register(&[VBUS_STAT])?;
         let result = (val >> 3) & 0x03;
         Ok(result.into())
     }
 
     pub fn get_bus_status(&mut self) -> Result<BusStatus, PmuSensorError> {
-        const POWERS_PPM_REG_0BH: u8 = 0x0B;
-        let val = self.read_register(&[POWERS_PPM_REG_0BH])?;
+        let val = self.read_register(&[VBUS_STAT])?;
         let result = (val >> 5) & 0x07;
         Ok(result.into())
     }
 
-    pub fn get_battery_voltage(&mut self) -> Result<(f32, bool), PmuSensorError> {
-        const POWERS_PPM_REG_0EH: u8 = 0x0E;
+    pub fn get_battery_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
+        let data = self.read_register(&[BATV])?;
+        let data = data & 0x7F;
+        let vbat = (data as u16) * 20 + 2304;
 
-        let mut data = self.read_register(&[POWERS_PPM_REG_0EH])?;
         let thermal_regulation = ((data >> 7) & 0x01) != 0;
-        data &= !(1 << 7);
-
-        let mut vbat = data as f32 * 0.02;
-        vbat += 2.304;
         Ok((vbat, thermal_regulation))
     }
 
-    pub fn get_vbus_voltage(&mut self) -> Result<(f32, bool), PmuSensorError> {
-        const POWERS_PPM_REG_11H: u8 = 0x11;
-        let mut data = self.read_register(&[POWERS_PPM_REG_11H])?;
+    pub fn get_vbus_voltage(&mut self) -> Result<(u16, bool), PmuSensorError> {
+        let data = self.read_register(&[VBUSV])?;
+        let data = data & 0x7F;
         let vbus_attached = ((data >> 7) & 0x01) != 0;
-        data &= !(1 << 7);
-        let mut vbus = 2.6;
-        vbus += data as f32 * 0.1;
+        if data == 0 {
+            return Ok((0, vbus_attached));
+        }
+        let vbus = (data as u16) * 100 + 2600;
 
         Ok((vbus, vbus_attached))
     }
 
+    pub fn get_sys_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        let data = self.read_register(&[SYSV])?;
+        let data = data & 0x7F;
+        let vsys = (data as u16) * 20 + 2304;
+
+        Ok(vsys)
+    }
+
     fn r_to_temp(&self, r: f64) -> f64 {
-        let mut temperature = r / 10000.0;
-        temperature = log(temperature);
-        temperature /= 3950.0;
-        temperature += 1.0 / 298.15;
-        temperature = 1.0 / temperature;
-        temperature - 273.25
+        const BETA: f64 = 3950.0; // Beta value for typical 10k NTC
+        const T0: f64 = 298.15; // 25°C in Kelvin
+        const R0: f64 = 10000.0; // 10k NTC reference resistance
+
+        // Calculate actual resistance using R0
+        let r_ntc = r * R0;
+
+        // Steinhart-Hart simplified equation with actual resistance
+        let temp_kelvin = 1.0 / (1.0 / T0 + (1.0 / BETA) * log(r_ntc / R0));
+        let temp_celsius = temp_kelvin - 273.15;
+
+        // Round to nearest 0.5°C
+        round(temp_celsius * 2.0) / 2.0
     }
 
     pub fn get_temperature(&mut self) -> Result<f64, PmuSensorError> {
-        const POWERS_PPM_REG_10H: u8 = 0x10;
-        let tspct = self.read_register(&[POWERS_PPM_REG_10H])? as f64 * 0.465 + 21.0;
-        let vts = 5.0 * tspct / 100.0;
-        let rp = (vts * 5230.0) / (5.0 - vts);
-        let ntc = (rp * 30100.0) / (30100.0 - rp);
-        Ok(self.r_to_temp(ntc))
+        let data = self.read_register(&[TSPCT])?;
+        let data = data & 0x7F;
+        let ntc_percent = (data as f64) * 0.465_f64 + 21_f64;
+        info!("NTC percent: {}", ntc_percent);
+        // Convert percentage to resistance ratio
+        let r_ratio = (100.0 - ntc_percent) / ntc_percent;
+        info!("r_ratio: {}", r_ratio);
+        Ok(self.r_to_temp(r_ratio))
     }
 
     /*pub fn set_min_vbus(&mut self, voltage: f32) -> Result<(), PmuSensorError> {
