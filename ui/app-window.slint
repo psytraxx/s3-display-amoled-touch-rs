@@ -1,0 +1,27 @@
+import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    in-out property <string> text: "Please press the button to update the text";
+    default-font-size: 20px;
+    callback request-update();
+    HorizontalBox {
+
+        Text {
+            text: {
+                root.text
+            };
+        }
+
+        HorizontalBox {
+            height: 50pt;
+            Button {
+                accessible-role: AccessibleRole.checkbox;
+                primary: true;
+                text: "Update";
+                clicked => {
+                    root.request-update();
+                }
+            }
+        }
+    }
+}
