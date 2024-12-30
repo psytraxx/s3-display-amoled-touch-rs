@@ -360,15 +360,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "embedded-dma"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "994f7e5b5cb23521c22304927195f236813053eb9c065dd2226a32ba64695446"
-dependencies = [
- "stable_deref_trait",
-]
-
-[[package]]
 name = "embedded-graphics"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -570,22 +561,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7584e4cd1dac06201fd92fff1c84b396be5458ac4d93e9457e7a89b1b42c60e"
 dependencies = [
  "document-features",
-]
-
-[[package]]
-name = "esp-display-interface-spi-dma"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d66c871ce0dd5ad71bede8ad3266d616571280f7c4446bdcec962d733a14cc6f"
-dependencies = [
- "byte-slice-cast",
- "display-interface",
- "display-interface-spi",
- "embedded-dma",
- "embedded-graphics",
- "embedded-hal 1.0.0",
- "esp-hal",
- "num-traits",
 ]
 
 [[package]]
@@ -1175,6 +1150,7 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "display-interface",
+ "display-interface-spi",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-time",
@@ -1185,7 +1161,6 @@ dependencies = [
  "embedded-text",
  "esp-alloc",
  "esp-backtrace",
- "esp-display-interface-spi-dma",
  "esp-hal",
  "esp-hal-embassy",
  "libm",

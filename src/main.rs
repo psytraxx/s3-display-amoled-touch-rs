@@ -22,8 +22,6 @@ use embedded_text::alignment::HorizontalAlignment;
 use embedded_text::style::{HeightMode, TextBoxStyle, TextBoxStyleBuilder};
 use embedded_text::TextBox;
 use esp_alloc::psram_allocator;
-use esp_display_interface_spi_dma::display_interface_spi_dma::{self};
-use esp_hal::dma::{Dma, DmaPriority};
 use esp_hal::gpio::{Input, Level, NoPin, Output};
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
@@ -119,9 +117,6 @@ async fn main(_spawner: Spawner) -> ! {
     pmicen.set_high();
     info!("PMICEN set high");
 
-    let dma = Dma::new(peripherals.DMA);
-    let dma_channel = dma.channel0;
-
     let spi_bus = Spi::new_with_config(
         peripherals.SPI2,
         Config {
@@ -131,15 +126,14 @@ async fn main(_spawner: Spawner) -> ! {
         },
     )
     .with_sck(sck)
-    .with_cs(cs)
-    .with_mosi(mosi)
-    .with_dma(dma_channel.configure(false, DmaPriority::Priority0));
+    .with_mosi(mosi);
 
     let dc_pin = peripherals.GPIO7;
     let rst_pin = peripherals.GPIO17;
 
-    let di =
-        display_interface_spi_dma::new_no_cs(LCD_PIXELS, spi_bus, Output::new(dc_pin, Level::Low));
+    let spi_bus = embedded_hal_bus::spi::ExclusiveDevice::new_no_delay(spi_bus, cs).unwrap();
+
+    let di = display_interface_spi::SPIInterface::new(spi_bus, Output::new(dc_pin, Level::Low));
 
     detect_spi_model(RefCellDevice::new(&i2c_ref_cell));
 

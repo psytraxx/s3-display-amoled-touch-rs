@@ -1,6 +1,6 @@
 use defmt::info;
 use display_interface::{DataFormat, WriteOnlyDataCommand};
-use embedded_graphics_core::{pixelcolor::Rgb565, prelude::IntoStorage};
+use embedded_graphics::{pixelcolor::Rgb565, prelude::IntoStorage};
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 use mipidsi::{
@@ -13,21 +13,6 @@ use mipidsi::{
 use crate::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 //https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series/blob/8c72b786373fbaef46ce35a6db924d6e16a0c3ec/src/LilyGo_AMOLED.cpp#L806
-
-/*static const  BoardsConfigure_t BOARD_AMOLED_191_SPI = {
-    // RM67162 Driver
-    RM67162_AMOLED_SPI,
-    &AMOLED_191_TOUCH_PINS,     //Touch CST816T
-    &AMOLED_191_SPI_PMU_PINS,   //PMU
-    NULL,                       //SENSOR
-    &AMOLED_191_SPI_SD_PINS,    //SDCard
-    AMOLED_191_BUTTONTS,        //Button Pins
-    1, //Button Number
-    -1,//pixelsPins
-    4, //adcPins
-    38,//PMICEnPins
-    false,//framebuffer
-}; */
 
 /*// LILYGO 1.91 Inch AMOLED(RM67162) S3R8
 // https://www.lilygo.cc/products/t-display-s3-amoled
@@ -116,8 +101,8 @@ const AMOLED_INIT_CMDS: &[LcdCommand] = &[
 
         {0x3A, {0x75}, 0x01}, // Interface Pixel Format 16bit/pixel
         {0xC4, {0x80}, 0x01},
-        {0x11, {0x00}, 0x01 | 0x80},
-        {0x29, {0x00}, 0x01 | 0x80},
+        {0x11, {0x00}, 0x01 | 0x80}, // Sleep Out
+        {0x29, {0x00}, 0x01 | 0x80}, // Display ON
     }; */
     LcdCommand {
         addr: 0xFE,
@@ -153,11 +138,13 @@ const AMOLED_INIT_CMDS: &[LcdCommand] = &[
         addr: 0x2A,
         params: &[0x02],
         delay_after: None,
+        //Set column start address
     },
     LcdCommand {
         addr: 0x2B,
         params: &[0x73],
         delay_after: None,
+        //Set row start address
     },
     LcdCommand {
         addr: 0xFE,
@@ -168,11 +155,13 @@ const AMOLED_INIT_CMDS: &[LcdCommand] = &[
         addr: 0x29,
         params: &[0x10],
         delay_after: None,
+        // display on
     },
     LcdCommand {
         addr: 0xFE,
         params: &[0x00],
         delay_after: None,
+        //CMD Mode Switch to User Command Set
     },
     LcdCommand {
         addr: 0x51,
@@ -183,11 +172,13 @@ const AMOLED_INIT_CMDS: &[LcdCommand] = &[
         addr: 0x53,
         params: &[0x20],
         delay_after: None,
+        //Write CTRL display
     },
     LcdCommand {
         addr: 0x35,
         params: &[0x00],
         delay_after: None,
+        // set Tearing Effect Line on
     },
     LcdCommand {
         addr: 0x3A,
@@ -198,6 +189,7 @@ const AMOLED_INIT_CMDS: &[LcdCommand] = &[
         addr: 0xC4,
         params: &[0x80],
         delay_after: None,
+        // set_DSPI Mode to SPI_WRAM
     },
     LcdCommand {
         addr: 0x11,
