@@ -2,61 +2,40 @@
 #![no_main]
 #![feature(async_closure)]
 
+use alloc::boxed::Box;
+use alloc::rc::Rc;
+use alloc::string::ToString;
 use bq25896::BQ25896;
 use core::cell::RefCell;
 use cst816s::CST816S;
 use defmt::{error, info};
+use display::{Display, DisplayPeripherals};
 use embassy_executor::Spawner;
 use embassy_time::Delay;
-use embedded_graphics::draw_target::DrawTarget;
-use embedded_graphics::mono_font::iso_8859_1::FONT_10X20 as FONT;
-use embedded_graphics::mono_font::MonoTextStyle;
-use embedded_graphics::prelude::Dimensions;
-use embedded_graphics::Drawable;
-use embedded_graphics_core::pixelcolor::Rgb565;
-use embedded_graphics_core::prelude::RgbColor;
-use embedded_hal::delay::DelayNs;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::RefCellDevice;
-use embedded_text::alignment::HorizontalAlignment;
-use embedded_text::style::{HeightMode, TextBoxStyle, TextBoxStyleBuilder};
-use embedded_text::TextBox;
 use esp_alloc::psram_allocator;
-use esp_hal::gpio::{Input, Level, NoPin, Output};
+use esp_hal::gpio::{Input, NoPin};
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
-use esp_hal::rng::Rng;
-use esp_hal::spi::master::Config;
-use esp_hal::spi::master::Spi;
-use esp_hal::spi::SpiMode;
+use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
-use mipidsi::options::Orientation;
-use mipidsi::Builder;
-use rm67162::RM67162;
+use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+use slint::platform::{Platform, PointerEventButton, WindowAdapter};
+use slint::{LogicalPosition, PhysicalSize};
 use {defmt_rtt as _, esp_backtrace as _};
 
 #[macro_use]
 extern crate alloc;
 
 mod bq25896;
+mod display;
 mod rm67162;
 
-pub const DISPLAY_HEIGHT: u16 = 536;
+pub const DISPLAY_HEIGHT: u16 = 240;
 
 /// Display resolution width in pixels
-pub const DISPLAY_WIDTH: u16 = 240;
-
-/// Total number of pixels in display
-pub const LCD_PIXELS: usize = (DISPLAY_HEIGHT as usize) * (DISPLAY_WIDTH as usize);
-
-/// Default text box style settings
-const TEXT_BOX_STYLE: TextBoxStyle = TextBoxStyleBuilder::new()
-    .height_mode(HeightMode::FitToText)
-    .alignment(HorizontalAlignment::Justified)
-    .build();
-
-/// Default text rendering style
-const TEXT_STYLE: MonoTextStyle<Rgb565> = MonoTextStyle::new(&FONT, Rgb565::WHITE);
+pub const DISPLAY_WIDTH: u16 = 536;
 
 /// I2C address of BQ25896 PMU
 const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
@@ -72,8 +51,6 @@ async fn main(_spawner: Spawner) -> ! {
         config.cpu_clock = CpuClock::Clock240MHz;
         config
     });
-
-    let mut rng = Rng::new(peripherals.RNG);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
 
@@ -106,85 +83,32 @@ async fn main(_spawner: Spawner) -> ! {
     let mut touchpad = CST816S::new(RefCellDevice::new(&i2c_ref_cell), touch_int, NoPin);
     touchpad.setup(&mut delay).expect("touchpad setup failed");
 
-    // initialize display
-    let sck = Output::new(peripherals.GPIO47, Level::Low);
-    let mosi = Output::new(peripherals.GPIO18, Level::Low);
-    let cs = Output::new(peripherals.GPIO6, Level::High);
-
-    let _te = Input::new(peripherals.GPIO9, esp_hal::gpio::Pull::Down);
-
-    let mut pmicen = Output::new_typed(peripherals.GPIO38, Level::Low);
-    pmicen.set_high();
-    info!("PMICEN set high");
-
-    let spi_bus = Spi::new_with_config(
-        peripherals.SPI2,
-        Config {
-            frequency: 80.MHz(), //TODO: 40MHz
-            mode: SpiMode::Mode0,
-            ..Config::default()
-        },
-    )
-    .with_sck(sck)
-    .with_mosi(mosi);
-
-    let dc_pin = peripherals.GPIO7;
-    let rst_pin = peripherals.GPIO17;
-
-    let spi_bus = embedded_hal_bus::spi::ExclusiveDevice::new_no_delay(spi_bus, cs).unwrap();
-
-    let di = display_interface_spi::SPIInterface::new(spi_bus, Output::new(dc_pin, Level::Low));
-
     detect_spi_model(RefCellDevice::new(&i2c_ref_cell));
 
-    let mut display = Builder::new(RM67162, di)
-        .orientation(Orientation {
-            rotation: mipidsi::options::Rotation::Deg90,
-            mirrored: false,
-        })
-        .display_size(DISPLAY_WIDTH, DISPLAY_HEIGHT)
-        .reset_pin(Output::new(rst_pin, Level::High))
-        .init(&mut delay)
-        .unwrap();
+    let display_peripherals = DisplayPeripherals {
+        sck: peripherals.GPIO47,
+        mosi: peripherals.GPIO18,
+        cs: peripherals.GPIO6,
+        dc: peripherals.GPIO7,
+        rst: peripherals.GPIO17,
+        pmicen: peripherals.GPIO38,
+        spi: peripherals.SPI2,
+    };
 
-    let mut x_touch_prev: i32 = 0;
-    let mut y_touch_prev: i32 = 0;
+    let mut display = Display::new(display_peripherals).expect("Display init failed");
 
-    loop {
-        let rand_val = rng.random();
-        let background_color = generate_dark_color(rand_val);
-        display.clear(background_color).expect("clear failed");
+    let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+    let size = PhysicalSize::new(DISPLAY_WIDTH.into(), DISPLAY_HEIGHT.into());
+    window.set_size(size);
+    let backend = Backend {
+        window: window.clone(),
+    };
 
-        if let Some(touch_event) = touchpad.read_one_touch_event(true) {
-            match touch_event.gesture {
-                cst816s::TouchGesture::None => _ = (),
-                cst816s::TouchGesture::SlideDown => info!("Gesture: Slide Down"),
-                cst816s::TouchGesture::SlideUp => info!("Gesture: Slide Up"),
-                cst816s::TouchGesture::SlideLeft => info!("Gesture: Slide Left"),
-                cst816s::TouchGesture::SlideRight => info!("Gesture: Slide Right"),
-                cst816s::TouchGesture::SingleClick => info!("Gesture: Single Click"),
-                cst816s::TouchGesture::DoubleClick => info!("Gesture: Double Click"),
-                cst816s::TouchGesture::LongPress => info!("Gesture: Long Press"),
-            }
+    slint::platform::set_platform(Box::new(backend)).unwrap();
 
-            let x_touch = touch_event.x;
-            let y_touch = touch_event.y;
+    let ui = AppWindow::new().expect("UI init failed");
 
-            if (x_touch != x_touch_prev) || (y_touch != y_touch_prev) {
-                info!("Touch event: {} {}", x_touch, y_touch);
-
-                display
-                    .set_pixel(
-                        DISPLAY_WIDTH - y_touch as u16,
-                        x_touch as u16,
-                        RgbColor::WHITE,
-                    )
-                    .expect("set_pixel failed");
-                y_touch_prev = touch_event.y;
-                x_touch_prev = touch_event.x;
-            }
-        }
-
+    ui.on_request_update({
         let is_vbus_present = pmu.is_vbus_in().unwrap();
 
         pmu.set_charge_enable(!is_vbus_present)
@@ -194,6 +118,7 @@ async fn main(_spawner: Spawner) -> ! {
             true => "Yes",
             false => "No",
         };
+
         let mut text = format!("CHG state: {}\n", pmu.get_charge_status().unwrap());
 
         text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
@@ -225,16 +150,45 @@ async fn main(_spawner: Spawner) -> ! {
             pmu.get_fast_charge_current_limit().unwrap()
         ));
 
-        let text_box = TextBox::with_textbox_style(
-            text.as_str(),
-            display.bounding_box(),
-            TEXT_STYLE,
-            TEXT_BOX_STYLE,
-        );
-        // Draw the text box.
-        text_box.draw(&mut display).expect("draw failed");
+        let ui_handle = ui.as_weak();
+        move || {
+            let ui = ui_handle.unwrap();
 
-        delay.delay_ms(10_000);
+            ui.set_text(text.clone().into());
+        }
+    });
+
+    loop {
+        slint::platform::update_timers_and_animations();
+        // Draw the scene if something needs to be drawn.
+        window.draw_if_needed(|renderer| {
+            //info!("Drawing scene");
+            renderer.render_by_line(&mut display);
+        });
+
+        if !window.has_active_animations() {
+            // if no animation is running, wait for the next input event
+            if let Some(touch_event) = touchpad.read_one_touch_event(true) {
+                let position = LogicalPosition::new(
+                    DISPLAY_WIDTH as f32 - touch_event.x as f32,
+                    DISPLAY_HEIGHT as f32 - touch_event.y as f32,
+                );
+                //info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
+                /*let event = slint::platform::WindowEvent::PointerMoved {
+                    position,
+                };*/
+                let button = PointerEventButton::Left;
+                if touch_event.action == 0 {
+                    let event = slint::platform::WindowEvent::PointerPressed { position, button };
+                    window.dispatch_event(event);
+                    window.request_redraw();
+                } else {
+                    let event = slint::platform::WindowEvent::PointerReleased { position, button };
+                    window.dispatch_event(event);
+                    window.request_redraw();
+                }
+            }
+        }
     }
 }
 
@@ -257,11 +211,29 @@ where
     }
 }
 
-/// Generates a dark RGB565 color from random value
-/// Used for background color cycling
-fn generate_dark_color(rand_val: u32) -> Rgb565 {
-    let r = (rand_val & 0x07) as u8;
-    let g = ((rand_val >> 3) & 0x07) as u8;
-    let b = ((rand_val >> 6) & 0x03) as u8;
-    Rgb565::new(r << 2, g << 2, b << 3) // Scale values for better distribution
+slint::include_modules!();
+
+struct Backend {
+    window: Rc<MinimalSoftwareWindow>,
+}
+
+impl Platform for Backend {
+    fn create_window_adapter(
+        &self,
+    ) -> Result<alloc::rc::Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError> {
+        // Since on MCUs, there can be only one window, just return a clone of self.window.
+        // We'll also use the same window in the event loop.
+        Ok(self.window.clone())
+    }
+
+    fn duration_since_start(&self) -> core::time::Duration {
+        core::time::Duration::from_millis(
+            SystemTimer::now() * 1_000 / SystemTimer::ticks_per_second(),
+        )
+    }
+
+    // fn run_event_loop(&self) -> Result<(), slint::PlatformError>
+    fn debug_log(&self, arguments: core::fmt::Arguments) {
+        info!("Slint: {}", arguments.to_string().as_str());
+    }
 }

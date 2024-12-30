@@ -1,4 +1,4 @@
-# S3 Display Touch SPI RS
+# S3 Display Touch SPI RS - Rust Example for LilyGo T-Display-S3 AMOLED Plus
 
 Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 
@@ -15,18 +15,22 @@ Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 - Display driver for RM67162 AMOLED controller
 - Touch input support via CST816S
 - Power management via BQ25896
-- SPI DMA display interface
+- SPI display interface
 - Touch gesture detection
 - Battery monitoring
 
 ## Dependencies
 
-- esp-hal
-- embedded-graphics
-- embedded-text
-- mipidsi
-- embassy-executor
-- defmt for logging
+- [esp-hal](https://crates.io/crates/esp-hal)
+- [embedded-graphics](https://crates.io/crates/embedded-graphics)
+- [embedded-text](https://crates.io/crates/embedded-text)
+- [mipidsi](https://crates.io/crates/mipidsi)
+- [embassy-executor](https://crates.io/crates/embassy-executor)
+- [defmt](https://crates.io/crates/defmt)
+- [defmt-rtt](https://crates.io/crates/defmt-rtt)
+- [slint](https://crates.io/crates/slint)
+- [cst816s](https://crates.io/crates/cst816s)
+- [esp-hal-embassy](https://crates.io/crates/esp-hal-embassy)
 
 ## Building
 
@@ -61,6 +65,3 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 ## License
 
 MIT License - see LICENSE file for details
-
-
-
