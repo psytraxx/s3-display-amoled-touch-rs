@@ -1,25 +1,31 @@
-import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
-
+import { HorizontalBox, VerticalBox, Button } from "std-widgets.slint";
 export component AppWindow inherits Window {
-    in-out property <string> text: "Plase click";
+    in-out property <string> text: "Please click";
+    in-out property <image> status-icon: @image-url("../assets/battery.png");
     default-font-size: 21px;
     callback request-update();
+
     HorizontalBox {
 
         Text {
-            text: {
-                root.text
-            };
+            text: root.text;
         }
 
-        HorizontalBox {
-            height: 50pt;
-            Button {
-                accessible-role: AccessibleRole.checkbox;
-                primary: true;
-                text: "Update";
-                clicked => {
-                    root.request-update();
+        VerticalBox {
+            Image {
+                source: root.status-icon;
+                width: 64px;
+                height: 64px;
+            }
+
+            HorizontalBox {
+                Button {
+                    accessible-role: AccessibleRole.checkbox;
+                    primary: true;
+                    text: "Update";
+                    clicked => {
+                        root.request-update();
+                    }
                 }
             }
         }
