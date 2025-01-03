@@ -1,4 +1,4 @@
-use crate::rm67162::RM67162;
+use crate::driver::rm67162_pmu_driver::RM67162;
 use crate::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 use core::convert::Infallible;

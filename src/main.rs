@@ -5,11 +5,12 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
-use bq25896::BQ25896;
 use core::cell::RefCell;
 use critical_section::Mutex;
 use defmt::{error, info};
 use display::{Display, DisplayPeripherals};
+use driver::display_bq25896::BQ25896;
+use driver::touch_cst816s::CST816S;
 use embassy_executor::Spawner;
 use embassy_time::Delay;
 use embedded_hal::i2c::I2c as I2CBus;
@@ -28,10 +29,8 @@ use {defmt_rtt as _, esp_backtrace as _};
 #[macro_use]
 extern crate alloc;
 
-mod bq25896;
-mod cst816s;
 mod display;
-mod rm67162;
+mod driver;
 
 pub const DISPLAY_HEIGHT: u16 = 240;
 
@@ -86,8 +85,7 @@ async fn main(_spawner: Spawner) -> ! {
     // initalize touchpad
     let touch_int = peripherals.GPIO21;
 
-    let mut touchpad =
-        cst816s::CST816S::new(CriticalSectionDevice::new(i2c_ref_cell), touch_int, delay);
+    let mut touchpad = CST816S::new(CriticalSectionDevice::new(i2c_ref_cell), touch_int, delay);
     touchpad.dump_registers().expect("unable to dump registers");
 
     detect_spi_model(CriticalSectionDevice::new(i2c_ref_cell));
