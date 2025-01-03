@@ -2,6 +2,9 @@
 
 Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 
+
+![LilyGo T-Display-S3 AMOLED Plus](https://lilygo.cc/cdn/shop/files/LILYGO-NEW-BOARDS.png)
+
 ## Hardware
 
 - [LilyGo T-Display-S3 AMOLED Plus](https://lilygo.cc/products/t-display-s3-amoled-plus)
