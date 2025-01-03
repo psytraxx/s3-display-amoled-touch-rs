@@ -21,16 +21,25 @@ Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 
 ## Dependencies
 
-- [esp-hal](https://crates.io/crates/esp-hal)
-- [embedded-graphics](https://crates.io/crates/embedded-graphics)
-- [embedded-text](https://crates.io/crates/embedded-text)
-- [mipidsi](https://crates.io/crates/mipidsi)
-- [embassy-executor](https://crates.io/crates/embassy-executor)
-- [defmt](https://crates.io/crates/defmt)
-- [defmt-rtt](https://crates.io/crates/defmt-rtt)
-- [slint](https://crates.io/crates/slint)
-- [cst816s](https://crates.io/crates/cst816s)
-- [esp-hal-embassy](https://crates.io/crates/esp-hal-embassy)
+- [esp-backtrace](https://crates.io/crates/esp-backtrace) - Provides backtrace support for ESP32-S3.
+- [esp-hal](https://crates.io/crates/esp-hal) - Hardware abstraction layer for the ESP32-S3.
+- [esp-alloc](https://crates.io/crates/esp-alloc) - Memory allocator for ESP32.
+- [defmt](https://crates.io/crates/defmt) - Logging framework designed for embedded systems.
+- [defmt-rtt](https://crates.io/crates/defmt-rtt) - RTT transport for defmt.
+- [embedded-hal](https://crates.io/crates/embedded-hal) - Traits for embedded hardware abstractions.
+- [embassy-embedded-hal](https://crates.io/crates/embassy-embedded-hal) - Async implementations of embedded-hal traits.
+- [esp-hal-embassy](https://crates.io/crates/esp-hal-embassy) - Integration of esp-hal with Embassy.
+- [embassy-executor](https://crates.io/crates/embassy-executor) - Task executor for async/await in embedded systems.
+- [mipidsi](https://crates.io/crates/mipidsi) - Driver for MIPI DSI displays.
+- [embedded-graphics-core](https://crates.io/crates/embedded-graphics-core) - Core traits for embedded-graphics.
+- [display-interface](https://crates.io/crates/display-interface) - Abstraction for display communication interfaces.
+- [display-interface-spi](https://crates.io/crates/display-interface-spi) - SPI implementation for display-interface.
+- [embassy-time](https://crates.io/crates/embassy-time) - Timer and delay abstractions for Embassy.
+- [embedded-hal-bus](https://crates.io/crates/embedded-hal-bus) - Bus abstractions for embedded-hal.
+- [critical-section](https://crates.io/crates/critical-section) - Critical section management.
+- [libm](https://crates.io/crates/libm) - Math library for embedded systems.
+- [slint](https://crates.io/crates/slint) - GUI toolkit for embedded systems.
+- [slint-build](https://crates.io/crates/slint-build) - Build script support for Slint.
 
 ## Building
 
@@ -56,7 +65,6 @@ Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
   - Double tap
   - Long press
   - Swipe (up/down/left/right)
-- Touch points are displayed in green
 
 ## Contributing
 

@@ -3,9 +3,14 @@ use defmt::{warn, Format};
 use embedded_hal::{delay::DelayNs, i2c::I2c};
 use esp_hal::gpio::{GpioPin, Input, Pull};
 
+const REG_DOUBLE_CLICK: u8 = 0xEC;
+const REG_AUTO_RESET: u8 = 0xFB;
+const REG_TOUCH_DATA: u8 = 0x01;
+const REG_VERSION: u8 = 0xA7;
+const REG_AUTO_SLEEP: u8 = 0xFE;
+const REG_AUTO_SLEEP_TIME: u8 = 0xF9;
+const REG_STANDBY: u8 = 0xA5;
 const CST816S_ADDRESS: u8 = 0x15;
-
-//https://github.com/fbiego/CST816S
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Gesture {
@@ -54,12 +59,12 @@ pub struct CST816S<I2C, INT, DELAY> {
     address: u8,
 }
 
-impl<I2C, DELAY> CST816S<I2C, Input<'static>, DELAY>
+impl<I2C, DELAY> CST816S<I2C, Input<'_>, DELAY>
 where
     I2C: I2c,
-
     DELAY: DelayNs,
 {
+    /// Create a new CST816S instance
     pub fn new(i2c: I2C, touch_int: GpioPin<21>, delay: DELAY) -> Self {
         let touch_int = Input::new(touch_int, Pull::None);
 
@@ -73,11 +78,11 @@ where
 
     /// Enable double click
     pub fn enable_double_click(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(0xEC, 0x01)
+        self.write_register(REG_DOUBLE_CLICK, 0x01)
     }
 
     pub fn enable_auto_reset(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(0xFB, 0x01)
+        self.write_register(REG_AUTO_RESET, 0x01)
     }
 
     pub fn dump_registers(&mut self) -> Result<(), TouchSensorError> {
@@ -94,24 +99,24 @@ where
 
     pub fn get_version(&mut self) -> Result<u8, TouchSensorError> {
         let mut buffer = [0u8; 1];
-        self.read_register(0xA7, &mut buffer)?;
+        self.read_register(REG_VERSION, &mut buffer)?;
         Ok(buffer[0])
     }
 
     /// Disable auto sleep mode
     pub fn disable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(0xFE, 0xFE)
+        self.write_register(REG_AUTO_SLEEP, 0xFE)
     }
 
     /// Enable auto sleep mode
     pub fn enable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(0xFE, 0x00)
+        self.write_register(REG_AUTO_SLEEP, 0x00)
     }
 
     pub fn set_auto_sleep_time(&mut self, mut seconds: i32) -> Result<(), TouchSensorError> {
         seconds = seconds.clamp(1, 255);
 
-        self.write_register(0xF9, seconds as u8)
+        self.write_register(REG_AUTO_SLEEP_TIME, seconds as u8)
     }
 
     pub fn read_touch(
@@ -121,10 +126,8 @@ where
         let mut data = TouchData::default();
         let mut buffer = [0u8; 7];
 
-        let data_available = !check_int_pin || self.is_touch_available();
-
-        if data_available {
-            self.read_register(0x01, &mut buffer)
+        if !check_int_pin || self.is_touch_available() {
+            self.read_register(REG_TOUCH_DATA, &mut buffer)
                 .map_err(|_| TouchSensorError::WriteError)?;
             data.gesture = Gesture::try_from(buffer[0])?;
             data.points = buffer[1];
@@ -143,7 +146,7 @@ where
         self.delay.delay_ms(50);
 
         // Write standby value to register 0xA5
-        self.write_register(0xA5, 0x03)?;
+        self.write_register(REG_STANDBY, 0x03)?;
 
         Ok(())
     }
