@@ -8,7 +8,7 @@ use alloc::string::ToString;
 use bq25896::BQ25896;
 use core::cell::RefCell;
 use critical_section::Mutex;
-use defmt::{error, info, warn};
+use defmt::{error, info};
 use display::{Display, DisplayPeripherals};
 use embassy_executor::Spawner;
 use embassy_time::Delay;
@@ -19,6 +19,7 @@ use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::xtensa_lx::singleton;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::platform::{Platform, PointerEventButton, WindowAdapter};
 use slint::{LogicalPosition, PhysicalSize};
@@ -64,11 +65,13 @@ async fn main(_spawner: Spawner) -> ! {
         .with_scl(peripherals.GPIO2)
         .into_async();
 
-    let i2c_ref_cell = Mutex::new(RefCell::new(i2c));
+    let i2c_ref_cell =
+        singleton!(:Mutex<RefCell<I2c<'_, esp_hal::Async>>> = Mutex::new(RefCell::new(i2c)))
+            .expect("Failed to create I2C mutex");
 
     // initalize bq25896 charger
     let mut pmu = BQ25896::new(
-        CriticalSectionDevice::new(&i2c_ref_cell),
+        CriticalSectionDevice::new(i2c_ref_cell),
         BQ25896_SLAVE_ADDRESS,
     )
     .expect("BQ25896 init failed");
@@ -84,9 +87,10 @@ async fn main(_spawner: Spawner) -> ! {
     let touch_int = peripherals.GPIO21;
 
     let mut touchpad =
-        cst816s::CST816S::new(CriticalSectionDevice::new(&i2c_ref_cell), touch_int, delay);
+        cst816s::CST816S::new(CriticalSectionDevice::new(i2c_ref_cell), touch_int, delay);
     touchpad.dump_registers().expect("unable to dump registers");
-    detect_spi_model(RefCellDevice::new(&i2c_ref_cell));
+
+    detect_spi_model(CriticalSectionDevice::new(i2c_ref_cell));
 
     let display_peripherals = DisplayPeripherals {
         sck: peripherals.GPIO47,
@@ -112,49 +116,48 @@ async fn main(_spawner: Spawner) -> ! {
     let ui = AppWindow::new().expect("UI init failed");
 
     ui.on_request_update({
-        let is_vbus_present = pmu.is_vbus_in().unwrap();
-        error!("update: {:?}", is_vbus_present);
-        pmu.set_charge_enable(!is_vbus_present)
-            .expect("set_charge_enable failed");
-
-        let is_vbus_present = match is_vbus_present {
-            true => "Yes",
-            false => "No",
-        };
-
-        let mut text = format!("CHG state: {}\n", pmu.get_charge_status().unwrap());
-
-        text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
-
-        text.push_str(&format!("Bus state: {}\n", pmu.get_bus_status().unwrap()));
-
-        text.push_str(&format!(
-            "Battery voltage: {}mv\n",
-            pmu.get_battery_voltage().unwrap()
-        ));
-
-        text.push_str(&format!(
-            "USB voltage: {}mv\n",
-            pmu.get_vbus_voltage().unwrap()
-        ));
-
-        text.push_str(&format!(
-            "SYS voltage: {}mv\n",
-            pmu.get_sys_voltage().unwrap()
-        ));
-
-        text.push_str(&format!(
-            "Temperature: {}°C\n",
-            pmu.get_temperature().unwrap()
-        ));
-
-        text.push_str(&format!(
-            "Fast charge current limit: {}mv\n",
-            pmu.get_fast_charge_current_limit().unwrap()
-        ));
-
         let ui_handle = ui.as_weak();
         move || {
+            info!("update pmu readings");
+            let is_vbus_present = pmu.is_vbus_in().unwrap();
+            pmu.set_charge_enable(!is_vbus_present)
+                .expect("set_charge_enable failed");
+
+            let is_vbus_present = match is_vbus_present {
+                true => "Yes",
+                false => "No",
+            };
+
+            let mut text = format!("CHG state: {}\n", pmu.get_charge_status().unwrap());
+
+            text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
+
+            text.push_str(&format!("Bus state: {}\n", pmu.get_bus_status().unwrap()));
+
+            text.push_str(&format!(
+                "Battery voltage: {}mv\n",
+                pmu.get_battery_voltage().unwrap()
+            ));
+
+            text.push_str(&format!(
+                "USB voltage: {}mv\n",
+                pmu.get_vbus_voltage().unwrap()
+            ));
+
+            text.push_str(&format!(
+                "SYS voltage: {}mv\n",
+                pmu.get_sys_voltage().unwrap()
+            ));
+
+            text.push_str(&format!(
+                "Temperature: {}°C\n",
+                pmu.get_temperature().unwrap()
+            ));
+
+            text.push_str(&format!(
+                "Fast charge current limit: {}mv\n",
+                pmu.get_fast_charge_current_limit().unwrap()
+            ));
             let ui = ui_handle.unwrap();
 
             ui.set_text(text.clone().into());
@@ -188,14 +191,14 @@ async fn main(_spawner: Spawner) -> ! {
 
                 let button = PointerEventButton::Left;
                 if touch_event.points > 0 && !touch_registered {
-                    warn!("Touch pressed");
+                    info!("Touch pressed");
                     let event = slint::platform::WindowEvent::PointerPressed { position, button };
                     window.dispatch_event(event);
                     window.request_redraw();
                     touch_registered = true;
                 }
                 if touch_event.points == 0 && touch_registered {
-                    warn!("Touch released");
+                    info!("Touch released");
                     let event = slint::platform::WindowEvent::PointerReleased { position, button };
                     window.dispatch_event(event);
                     window.request_redraw();

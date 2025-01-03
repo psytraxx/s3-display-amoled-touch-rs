@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use defmt::{warn, Format};
 use embedded_hal::{delay::DelayNs, i2c::I2c};
 use esp_hal::gpio::{GpioPin, Input, Pull};
