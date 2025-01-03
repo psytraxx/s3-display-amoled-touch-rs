@@ -1,5 +1,6 @@
 use core::fmt::{self, Display, Formatter};
 
+use alloc::string::String;
 use defmt::{debug, Format};
 use embedded_hal::i2c::I2c;
 use libm::{log, round};
@@ -218,6 +219,34 @@ where
         val &= 0x80;
         val |= (current / CHARGE_STEP) as u8;
         self.write_register(ICHG, val)
+    }
+
+    pub fn get_info(&mut self) -> Result<String, PmuSensorError> {
+        let is_vbus_present = self.is_vbus_in()?;
+        self.set_charge_enable(!is_vbus_present)?;
+
+        let is_vbus_present = match is_vbus_present {
+            true => "Yes",
+            false => "No",
+        };
+
+        let mut text = format!("CHG state: {}\n", self.get_charge_status()?);
+
+        text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
+        text.push_str(&format!("Bus state: {}\n", self.get_bus_status()?));
+        text.push_str(&format!(
+            "Battery voltage: {}mv\n",
+            self.get_battery_voltage()?
+        ));
+        text.push_str(&format!("USB voltage: {}mv\n", self.get_vbus_voltage()?));
+        text.push_str(&format!("SYS voltage: {}mv\n", self.get_sys_voltage()?));
+        text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));
+        text.push_str(&format!(
+            "Fast charge current limit: {}mv\n",
+            self.get_fast_charge_current_limit()?
+        ));
+
+        Ok(text)
     }
 }
 

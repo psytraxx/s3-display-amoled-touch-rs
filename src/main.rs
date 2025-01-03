@@ -119,47 +119,9 @@ async fn main(_spawner: Spawner) -> ! {
         let ui_handle = ui.as_weak();
         move || {
             info!("update pmu readings");
-            let is_vbus_present = pmu.is_vbus_in().unwrap();
-            pmu.set_charge_enable(!is_vbus_present)
-                .expect("set_charge_enable failed");
 
-            let is_vbus_present = match is_vbus_present {
-                true => "Yes",
-                false => "No",
-            };
-
-            let mut text = format!("CHG state: {}\n", pmu.get_charge_status().unwrap());
-
-            text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
-
-            text.push_str(&format!("Bus state: {}\n", pmu.get_bus_status().unwrap()));
-
-            text.push_str(&format!(
-                "Battery voltage: {}mv\n",
-                pmu.get_battery_voltage().unwrap()
-            ));
-
-            text.push_str(&format!(
-                "USB voltage: {}mv\n",
-                pmu.get_vbus_voltage().unwrap()
-            ));
-
-            text.push_str(&format!(
-                "SYS voltage: {}mv\n",
-                pmu.get_sys_voltage().unwrap()
-            ));
-
-            text.push_str(&format!(
-                "Temperature: {}°C\n",
-                pmu.get_temperature().unwrap()
-            ));
-
-            text.push_str(&format!(
-                "Fast charge current limit: {}mv\n",
-                pmu.get_fast_charge_current_limit().unwrap()
-            ));
             let ui = ui_handle.unwrap();
-
+            let text = pmu.get_info().unwrap();
             ui.set_text(text.clone().into());
         }
     });
@@ -185,25 +147,24 @@ async fn main(_spawner: Spawner) -> ! {
                 //info!("Touch version: {:?}", touchpad.get_version());
                 //info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
 
-                /*let event = slint::platform::WindowEvent::PointerMoved {
-                    position,
-                };*/
+                let event = slint::platform::WindowEvent::PointerMoved { position };
+                window.dispatch_event(event);
 
                 let button = PointerEventButton::Left;
                 if touch_event.points > 0 && !touch_registered {
                     info!("Touch pressed");
                     let event = slint::platform::WindowEvent::PointerPressed { position, button };
                     window.dispatch_event(event);
-                    window.request_redraw();
                     touch_registered = true;
                 }
                 if touch_event.points == 0 && touch_registered {
                     info!("Touch released");
                     let event = slint::platform::WindowEvent::PointerReleased { position, button };
                     window.dispatch_event(event);
-                    window.request_redraw();
                     touch_registered = false;
                 }
+
+                window.request_redraw();
             }
         }
     }
