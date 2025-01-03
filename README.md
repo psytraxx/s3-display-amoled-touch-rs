@@ -1,4 +1,4 @@
-# S3 Display Touch SPI RS - Rust Example for LilyGo T-Display-S3 AMOLED Plus
+# T-Display-S3 AMOLED Plus
 
 Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 
@@ -72,4 +72,4 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](./LICENSE) file for details
