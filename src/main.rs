@@ -86,7 +86,6 @@ async fn main(_spawner: Spawner) -> ! {
     let touch_int = peripherals.GPIO21;
 
     let mut touchpad = CST816S::new(CriticalSectionDevice::new(i2c_ref_cell), touch_int, delay);
-    touchpad.dump_registers().expect("unable to dump registers");
 
     detect_spi_model(CriticalSectionDevice::new(i2c_ref_cell));
 

@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use defmt::{warn, Format};
+use defmt::Format;
 use embedded_hal::{delay::DelayNs, i2c::I2c};
 use esp_hal::gpio::{GpioPin, Input, Pull};
 
@@ -83,18 +83,6 @@ where
 
     pub fn enable_auto_reset(&mut self) -> Result<(), TouchSensorError> {
         self.write_register(REG_AUTO_RESET, 0x01)
-    }
-
-    pub fn dump_registers(&mut self) -> Result<(), TouchSensorError> {
-        for i in 1..255 {
-            let mut val = [0u8; 1];
-            self.read_register(i, &mut val)?;
-            self.delay.delay_ms(10);
-            if val[0] > 0 {
-                warn!("reg {:#02x} {:#02x}", i, val);
-            }
-        }
-        Ok(())
     }
 
     pub fn get_version(&mut self) -> Result<u8, TouchSensorError> {
