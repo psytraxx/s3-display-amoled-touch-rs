@@ -6,23 +6,24 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
 use core::cell::RefCell;
+use core::time::Duration;
 use critical_section::Mutex;
 use defmt::{error, info};
 use display::{Display, DisplayPeripherals};
 use driver::display_bq25896::BQ25896;
 use driver::touch_cst816s::CST816S;
 use embassy_executor::Spawner;
-use embassy_time::Delay;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::CriticalSectionDevice;
 use esp_alloc::psram_allocator;
+use esp_hal::delay::Delay;
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::xtensa_lx::singleton;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
-use slint::platform::{Platform, PointerEventButton, WindowAdapter};
+use slint::platform::{Platform, PointerEventButton};
 use slint::{LogicalPosition, PhysicalSize};
 use {defmt_rtt as _, esp_backtrace as _};
 
@@ -44,7 +45,7 @@ const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
 async fn main(_spawner: Spawner) -> ! {
     esp_alloc::heap_allocator!(72 * 1024);
 
-    let delay = Delay;
+    let delay = Delay::new();
 
     let peripherals = esp_hal::init({
         let mut config = esp_hal::Config::default();
@@ -127,11 +128,6 @@ async fn main(_spawner: Spawner) -> ! {
 
     loop {
         slint::platform::update_timers_and_animations();
-        // Draw the scene if something needs to be drawn.
-        window.draw_if_needed(|renderer| {
-            //info!("Drawing scene");
-            renderer.render_by_line(&mut display);
-        });
 
         if !window.has_active_animations() {
             // if no animation is running, wait for the next input event
@@ -141,29 +137,34 @@ async fn main(_spawner: Spawner) -> ! {
                     DISPLAY_HEIGHT as f32 - touch_event.y as f32,
                 );
 
-                //info!("Touch version: {:?}", touchpad.get_version());
                 //info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
 
-                let event = slint::platform::WindowEvent::PointerMoved { position };
-                window.dispatch_event(event);
-
-                let button = PointerEventButton::Left;
                 if touch_event.points > 0 && !touch_registered {
-                    info!("Touch pressed");
-                    let event = slint::platform::WindowEvent::PointerPressed { position, button };
-                    window.dispatch_event(event);
+                    //info!("Touch pressed");
+                    window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
+                        position,
+                        button: PointerEventButton::Left,
+                    });
                     touch_registered = true;
-                }
-                if touch_event.points == 0 && touch_registered {
-                    info!("Touch released");
-                    let event = slint::platform::WindowEvent::PointerReleased { position, button };
-                    window.dispatch_event(event);
+                } else if touch_event.points > 0 && touch_registered {
+                    //info!("Touch down");
+                    window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position });
+                } else if touch_event.points == 0 && touch_registered {
+                    //info!("Touch released");
+                    window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
+                        position,
+                        button: PointerEventButton::Left,
+                    });
                     touch_registered = false;
                 }
-
-                window.request_redraw();
             }
         }
+
+        // Draw the scene if something needs to be drawn.
+        window.draw_if_needed(|renderer| {
+            //info!("Drawing scene");
+            renderer.render_by_line(&mut display);
+        });
     }
 }
 
