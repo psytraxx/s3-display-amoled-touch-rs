@@ -6,7 +6,6 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
 use core::cell::RefCell;
-use core::time::Duration;
 use critical_section::Mutex;
 use defmt::{error, info};
 use display::{Display, DisplayPeripherals};

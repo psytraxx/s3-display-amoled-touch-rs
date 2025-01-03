@@ -37,7 +37,6 @@ Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 - [embedded-graphics-core](https://crates.io/crates/embedded-graphics-core) - Core traits for embedded-graphics.
 - [display-interface](https://crates.io/crates/display-interface) - Abstraction for display communication interfaces.
 - [display-interface-spi](https://crates.io/crates/display-interface-spi) - SPI implementation for display-interface.
-- [embassy-time](https://crates.io/crates/embassy-time) - Timer and delay abstractions for Embassy.
 - [embedded-hal-bus](https://crates.io/crates/embedded-hal-bus) - Bus abstractions for embedded-hal.
 - [critical-section](https://crates.io/crates/critical-section) - Critical section management.
 - [libm](https://crates.io/crates/libm) - Math library for embedded systems.
