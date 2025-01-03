@@ -7,12 +7,13 @@ use alloc::rc::Rc;
 use alloc::string::ToString;
 use bq25896::BQ25896;
 use core::cell::RefCell;
+use critical_section::Mutex;
 use defmt::{error, info, warn};
 use display::{Display, DisplayPeripherals};
 use embassy_executor::Spawner;
 use embassy_time::Delay;
 use embedded_hal::i2c::I2c as I2CBus;
-use embedded_hal_bus::i2c::RefCellDevice;
+use embedded_hal_bus::i2c::CriticalSectionDevice;
 use esp_alloc::psram_allocator;
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
@@ -63,11 +64,14 @@ async fn main(_spawner: Spawner) -> ! {
         .with_scl(peripherals.GPIO2)
         .into_async();
 
-    let i2c_ref_cell = RefCell::new(i2c);
+    let i2c_ref_cell = Mutex::new(RefCell::new(i2c));
 
     // initalize bq25896 charger
-    let mut pmu = BQ25896::new(RefCellDevice::new(&i2c_ref_cell), BQ25896_SLAVE_ADDRESS)
-        .expect("BQ25896 init failed");
+    let mut pmu = BQ25896::new(
+        CriticalSectionDevice::new(&i2c_ref_cell),
+        BQ25896_SLAVE_ADDRESS,
+    )
+    .expect("BQ25896 init failed");
 
     pmu.set_adc_enabled().expect("set_adc_enabled failed");
 
@@ -79,7 +83,8 @@ async fn main(_spawner: Spawner) -> ! {
     // initalize touchpad
     let touch_int = peripherals.GPIO21;
 
-    let mut touchpad = cst816s::CST816S::new(RefCellDevice::new(&i2c_ref_cell), touch_int, delay);
+    let mut touchpad =
+        cst816s::CST816S::new(CriticalSectionDevice::new(&i2c_ref_cell), touch_int, delay);
     touchpad.dump_registers().expect("unable to dump registers");
     detect_spi_model(RefCellDevice::new(&i2c_ref_cell));
 
