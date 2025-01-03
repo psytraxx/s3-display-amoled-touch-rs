@@ -744,14 +744,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cst816s"
-version = "1.0.0"
-source = "git+https://github.com/vstepanyuk/cst816s.git?branch=master#1e0cffbf69306548754bbfe6bc3c50441efa5298"
-dependencies = [
- "embedded-hal 1.0.0",
-]
-
-[[package]]
 name = "cursor-icon"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3482,7 +3474,6 @@ name = "s3-display-amoled-touch-rs"
 version = "0.1.0"
 dependencies = [
  "critical-section",
- "cst816s",
  "defmt",
  "defmt-rtt",
  "display-interface",
