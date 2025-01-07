@@ -1,5 +1,5 @@
-use crate::driver::rm67162_pmu_driver::RM67162;
-use crate::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use crate::driver::rm67162::RM67162;
+use crate::DISPLAY_WIDTH;
 
 use core::convert::Infallible;
 use defmt::info;
@@ -82,7 +82,6 @@ impl<'a> Display<'a> {
                 mirrored: false,
                 rotation: mipidsi::options::Rotation::Deg90,
             })
-            .display_size(DISPLAY_WIDTH, DISPLAY_HEIGHT)
             .reset_pin(Output::new(rst_pin, Level::High))
             .init(&mut delay)
             .unwrap();
