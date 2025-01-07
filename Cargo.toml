@@ -16,14 +16,10 @@ esp-alloc = { version = "0.5.0" }
 defmt = "0.3.8"
 defmt-rtt = "0.4.1"
 embedded-hal = { version = "1.0.0", features = ["defmt-03"] }
-embassy-embedded-hal = { version = "0.2.0", default-features = false, features = [
+embassy-embedded-hal = { version = "0.3.0", default-features = false, features = [
     "defmt",
 ] }
-esp-hal-embassy = { version = "0.5.0", features = [
-    "esp32s3",
-    "defmt",
-    "integrated-timers",
-] }
+esp-hal-embassy = { version = "0.5.0", features = ["esp32s3", "defmt"] }
 embassy-executor = { version = "0.6.0", features = [
     "task-arena-size-163840",
     "defmt",
