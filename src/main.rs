@@ -97,9 +97,11 @@ async fn main(_spawner: Spawner) -> ! {
         rst: peripherals.GPIO17,
         pmicen: peripherals.GPIO38,
         spi: peripherals.SPI2,
+        dma: peripherals.DMA,
     };
 
-    let mut display = Display::new(display_peripherals).expect("Display init failed");
+    let mut buffer = [0_u8; 512];
+    let mut display = Display::new(display_peripherals, &mut buffer).expect("Display init failed");
 
     let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
     let size = PhysicalSize::new(DISPLAY_WIDTH.into(), DISPLAY_HEIGHT.into());

@@ -3,23 +3,24 @@ use crate::DISPLAY_WIDTH;
 
 use core::convert::Infallible;
 use defmt::info;
-use display_interface::DisplayError;
 use embedded_graphics_core::pixelcolor::raw::RawU16;
+use embedded_hal_bus::spi::ExclusiveDevice;
 use esp_hal::delay::Delay;
+use esp_hal::dma::{Dma, DmaRxBuf, DmaTxBuf};
 use esp_hal::gpio::{GpioPin, Level, Output};
-use esp_hal::peripherals::SPI2;
-use esp_hal::prelude::*;
-use esp_hal::spi::master::{Config, Spi};
-use esp_hal::spi::{SpiBitOrder, SpiMode};
-use mipidsi::error::InitError;
+use esp_hal::peripherals::{DMA, SPI2};
+use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
+use esp_hal::{dma_buffers, prelude::*};
+use mipidsi::interface::SpiInterface;
 use mipidsi::options::Orientation;
 use mipidsi::{Builder, Display as MipiDisplay};
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
 pub type MipiDisplayWrapper<'a> = MipiDisplay<
-    display_interface_spi::SPIInterface<
-        embedded_hal_bus::spi::ExclusiveDevice<
-            Spi<'a, esp_hal::Blocking>,
+    SpiInterface<
+        'a,
+        ExclusiveDevice<
+            SpiDmaBus<'a, esp_hal::Blocking>,
             Output<'a>,
             embedded_hal_bus::spi::NoDelay,
         >,
@@ -42,10 +43,11 @@ pub struct DisplayPeripherals {
     pub dc: GpioPin<7>,
     pub rst: GpioPin<17>,
     pub spi: SPI2,
+    pub dma: DMA,
 }
 
 impl<'a> Display<'a> {
-    pub fn new(p: DisplayPeripherals) -> Result<Self, Error> {
+    pub fn new(p: DisplayPeripherals, buffer: &'a mut [u8]) -> Result<Self, Error> {
         // SPI pins
         let sck = Output::new(p.sck, Level::Low);
         let mosi = Output::new(p.mosi, Level::Low);
@@ -55,25 +57,34 @@ impl<'a> Display<'a> {
         pmicen.set_high();
         info!("PMICEN set high");
 
+        let dma = Dma::new(p.dma);
+
         // Configure SPI
-        let spi_bus = Spi::new_with_config(
+        let spi = Spi::new_with_config(
             p.spi,
             Config {
-                frequency: 80.MHz(),
-                mode: SpiMode::Mode0,
-                write_bit_order: SpiBitOrder::MSBFirst,
-                read_bit_order: SpiBitOrder::MSBFirst,
+                frequency: 75.MHz(),
+                ..Config::default()
             },
         )
         .with_sck(sck)
-        .with_mosi(mosi);
+        .with_mosi(mosi)
+        .with_dma(
+            dma.channel0
+                .configure(false, esp_hal::dma::DmaPriority::Priority0),
+        );
 
         let dc_pin = p.dc;
         let rst_pin = p.rst;
+        let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
+        let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
+        let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
 
-        let spi_bus = embedded_hal_bus::spi::ExclusiveDevice::new_no_delay(spi_bus, cs).unwrap();
+        let spi = SpiDmaBus::new(spi, dma_rx_buf, dma_tx_buf);
 
-        let di = display_interface_spi::SPIInterface::new(spi_bus, Output::new(dc_pin, Level::Low));
+        let spi_device = ExclusiveDevice::new_no_delay(spi, cs).unwrap();
+
+        let di = SpiInterface::new(spi_device, Output::new(dc_pin, Level::Low), buffer);
 
         let mut delay = Delay::new();
 
@@ -123,21 +134,10 @@ impl<'a> LineBufferProvider for &mut Display<'a> {
 /// A clock error
 #[derive(Debug)]
 pub enum Error {
-    DisplayInterface(DisplayError),
+    DisplayInterface,
     Infallible,
 }
 
-impl From<DisplayError> for Error {
-    fn from(error: DisplayError) -> Self {
-        Self::DisplayInterface(error)
-    }
-}
-
-impl From<InitError<Infallible>> for Error {
-    fn from(_: InitError<Infallible>) -> Self {
-        Self::Infallible
-    }
-}
 impl From<Infallible> for Error {
     fn from(_: Infallible) -> Self {
         Self::Infallible
