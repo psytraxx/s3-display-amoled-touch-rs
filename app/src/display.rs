@@ -2,11 +2,6 @@ use crate::DISPLAY_WIDTH;
 
 use core::convert::Infallible;
 use defmt::info;
-use embedded_drivers_rs::mipidsi::interface::SpiInterface;
-use embedded_drivers_rs::mipidsi::options::{Orientation, Rotation};
-use embedded_drivers_rs::mipidsi::Builder;
-use embedded_drivers_rs::mipidsi::Display as MipiDisplay;
-use embedded_drivers_rs::rm67162::RM67162;
 use embedded_graphics_core::pixelcolor::raw::RawU16;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use esp_hal::delay::Delay;
@@ -15,6 +10,11 @@ use esp_hal::gpio::{GpioPin, Level, Output};
 use esp_hal::peripherals::{DMA, SPI2};
 use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
 use esp_hal::{dma_buffers, prelude::*};
+use s3_display_amoled_touch_drivers::mipidsi::interface::SpiInterface;
+use s3_display_amoled_touch_drivers::mipidsi::options::{Orientation, Rotation};
+use s3_display_amoled_touch_drivers::mipidsi::Builder;
+use s3_display_amoled_touch_drivers::mipidsi::Display as MipiDisplay;
+use s3_display_amoled_touch_drivers::rm67162::RM67162;
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
 pub type MipiDisplayWrapper<'a> = MipiDisplay<

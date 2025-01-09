@@ -1,0 +1,10 @@
+[package]
+name = "s3-display-amoled-touch-drivers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embedded-graphics-core = { version = "0.4.0" }
+mipidsi = { git = "https://github.com/almindor/mipidsi.git", branch = "v0.9.0" }
+embedded-hal = { version = "1.0.0" }
+libm = "0.2"

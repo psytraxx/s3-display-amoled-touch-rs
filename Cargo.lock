@@ -1121,17 +1121,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "embedded-drivers-rs"
-version = "0.1.0"
-source = "git+https://github.com/psytraxx/embedded-drivers-rs.git?branch=main#b2f54056ab32a37ce4a58d0e51d19bf83d27b5be"
-dependencies = [
- "embedded-graphics-core",
- "embedded-hal 1.0.0",
- "libm",
- "mipidsi",
-]
-
-[[package]]
 name = "embedded-graphics-core"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3465,7 +3454,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
-name = "s3-display-amoled-touch-rs"
+name = "s3-display-amoled-touch-app"
 version = "0.1.0"
 dependencies = [
  "critical-section",
@@ -3473,7 +3462,6 @@ dependencies = [
  "defmt-rtt",
  "embassy-embedded-hal 0.3.0",
  "embassy-executor",
- "embedded-drivers-rs",
  "embedded-graphics-core",
  "embedded-hal 1.0.0",
  "embedded-hal-bus",
@@ -3482,8 +3470,19 @@ dependencies = [
  "esp-hal",
  "esp-hal-embassy",
  "libm",
+ "s3-display-amoled-touch-drivers",
  "slint",
  "slint-build",
+]
+
+[[package]]
+name = "s3-display-amoled-touch-drivers"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "libm",
+ "mipidsi",
 ]
 
 [[package]]
