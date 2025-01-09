@@ -9,13 +9,14 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use defmt::{error, info};
 use display::{Display, DisplayPeripherals};
-use driver::bq25896::BQ25896;
-use driver::cst816s::CST816S;
 use embassy_executor::Spawner;
+use embedded_drivers_rs::bq25896::BQ25896;
+use embedded_drivers_rs::cst816s::CST816S;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::CriticalSectionDevice;
 use esp_alloc::psram_allocator;
 use esp_hal::delay::Delay;
+use esp_hal::gpio::{Input, Pull};
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
 use esp_hal::timer::systimer::SystemTimer;
@@ -26,11 +27,9 @@ use slint::platform::{Platform, PointerEventButton};
 use slint::{LogicalPosition, PhysicalSize};
 use {defmt_rtt as _, esp_backtrace as _};
 
-#[macro_use]
 extern crate alloc;
 
 mod display;
-mod driver;
 
 pub const DISPLAY_HEIGHT: u16 = 240;
 
@@ -84,6 +83,7 @@ async fn main(_spawner: Spawner) -> ! {
 
     // initalize touchpad
     let touch_int = peripherals.GPIO21;
+    let touch_int = Input::new(touch_int, Pull::None);
 
     let mut touchpad = CST816S::new(CriticalSectionDevice::new(i2c_ref_cell), touch_int, delay);
 

@@ -1,8 +1,12 @@
-use crate::driver::rm67162::RM67162;
 use crate::DISPLAY_WIDTH;
 
 use core::convert::Infallible;
 use defmt::info;
+use embedded_drivers_rs::mipidsi::interface::SpiInterface;
+use embedded_drivers_rs::mipidsi::options::{Orientation, Rotation};
+use embedded_drivers_rs::mipidsi::Builder;
+use embedded_drivers_rs::mipidsi::Display as MipiDisplay;
+use embedded_drivers_rs::rm67162::RM67162;
 use embedded_graphics_core::pixelcolor::raw::RawU16;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use esp_hal::delay::Delay;
@@ -11,9 +15,6 @@ use esp_hal::gpio::{GpioPin, Level, Output};
 use esp_hal::peripherals::{DMA, SPI2};
 use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
 use esp_hal::{dma_buffers, prelude::*};
-use mipidsi::interface::SpiInterface;
-use mipidsi::options::Orientation;
-use mipidsi::{Builder, Display as MipiDisplay};
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
 pub type MipiDisplayWrapper<'a> = MipiDisplay<
@@ -91,7 +92,7 @@ impl<'a> Display<'a> {
         let display = Builder::new(RM67162, di)
             .orientation(Orientation {
                 mirrored: false,
-                rotation: mipidsi::options::Rotation::Deg90,
+                rotation: Rotation::Deg90,
             })
             .reset_pin(Output::new(rst_pin, Level::High))
             .init(&mut delay)

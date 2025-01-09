@@ -1121,6 +1121,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-drivers-rs"
+version = "0.1.0"
+source = "git+https://github.com/psytraxx/embedded-drivers-rs.git?branch=main#c2d414d9a818eb5760d4cb77b396e3db8a8a6d84"
+dependencies = [
+ "defmt",
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "libm",
+ "mipidsi",
+]
+
+[[package]]
 name = "embedded-graphics-core"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3462,6 +3474,7 @@ dependencies = [
  "defmt-rtt",
  "embassy-embedded-hal 0.3.0",
  "embassy-executor",
+ "embedded-drivers-rs",
  "embedded-graphics-core",
  "embedded-hal 1.0.0",
  "embedded-hal-bus",
@@ -3470,7 +3483,6 @@ dependencies = [
  "esp-hal",
  "esp-hal-embassy",
  "libm",
- "mipidsi",
  "slint",
  "slint-build",
 ]
