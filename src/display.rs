@@ -92,7 +92,7 @@ impl<'a> Display<'a> {
         let display = Builder::new(RM67162, di)
             .orientation(Orientation {
                 mirrored: false,
-                rotation: Rotation::Deg90,
+                rotation: Rotation::Deg270,
             })
             .reset_pin(Output::new(rst_pin, Level::High))
             .init(&mut delay)
