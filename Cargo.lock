@@ -3470,6 +3470,7 @@ dependencies = [
  "esp-hal",
  "esp-hal-embassy",
  "libm",
+ "mipidsi",
  "s3-display-amoled-touch-drivers",
  "slint",
  "slint-build",
