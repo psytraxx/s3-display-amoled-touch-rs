@@ -9,7 +9,6 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use defmt::{error, info};
 use display::{Display, DisplayPeripherals};
-use embassy_executor::Spawner;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::CriticalSectionDevice;
 use esp_alloc::psram_allocator;
@@ -18,7 +17,6 @@ use esp_hal::gpio::{Input, Pull};
 use esp_hal::i2c::master::I2c;
 use esp_hal::prelude::*;
 use esp_hal::timer::systimer::SystemTimer;
-use esp_hal::timer::timg::TimerGroup;
 use esp_hal::xtensa_lx::singleton;
 use s3_display_amoled_touch_drivers::bq25896::BQ25896;
 use s3_display_amoled_touch_drivers::cst816s::CST816S;
@@ -39,8 +37,8 @@ pub const DISPLAY_WIDTH: u16 = 536;
 /// I2C address of BQ25896 PMU
 const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
 
-#[main]
-async fn main(_spawner: Spawner) -> ! {
+#[entry]
+fn main() -> ! {
     esp_alloc::heap_allocator!(72 * 1024);
 
     let delay = Delay::new();
@@ -50,10 +48,6 @@ async fn main(_spawner: Spawner) -> ! {
         config.cpu_clock = CpuClock::Clock240MHz;
         config
     });
-
-    let timg0 = TimerGroup::new(peripherals.TIMG0);
-
-    esp_hal_embassy::init(timg0.timer0);
 
     psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
