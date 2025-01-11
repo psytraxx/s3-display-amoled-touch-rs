@@ -22,11 +22,7 @@ use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, prelude::*};
 use mipidsi::interface::SpiInterface;
-use mipidsi::options::{Orientation, Rotation};
-use mipidsi::Builder;
-use s3_display_amoled_touch_drivers::bq25896::BQ25896;
-use s3_display_amoled_touch_drivers::cst816s::CST816S;
-use s3_display_amoled_touch_drivers::rm67162::RM67162;
+use s3_display_amoled_touch_drivers::{bq25896::BQ25896, cst816s::CST816S};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel};
 use slint::platform::{Platform, PointerEventButton};
 use slint::{LogicalPosition, PhysicalSize};
@@ -141,21 +137,11 @@ fn main() -> ! {
         &mut buffer,
     );
 
-    // Initialize display
-    let display = Builder::new(RM67162, di)
-        .orientation(Orientation {
-            mirrored: false,
-            rotation: Rotation::Deg270,
-        })
-        .reset_pin(Output::new(peripherals.GPIO17, Level::High))
-        .init(&mut delay)
-        .unwrap();
+    let rst = Output::new(peripherals.GPIO17, Level::High);
 
     // Initialize buffer provider
-    let mut buffer_provider = DrawBuffer {
-        display,
-        line_buffer: &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize],
-    };
+    let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
+    let mut buffer_provider = DrawBuffer::new(di, line_buffer, rst, &mut delay);
 
     let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
     let size = PhysicalSize::new(DISPLAY_WIDTH.into(), DISPLAY_HEIGHT.into());

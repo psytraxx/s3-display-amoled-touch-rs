@@ -1,8 +1,10 @@
 use embedded_graphics_core::pixelcolor::raw::RawU16;
 use embedded_hal::digital::OutputPin;
+use esp_hal::delay::Delay;
 use mipidsi::interface::{Interface, InterfacePixelFormat};
 use mipidsi::models::Model;
-use mipidsi::Display as MipiDisplay;
+use mipidsi::options::{Orientation, Rotation};
+use mipidsi::{Builder, Display as MipiDisplay};
 use s3_display_amoled_touch_drivers::rm67162::RM67162;
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
@@ -15,6 +17,34 @@ where
 {
     pub display: MipiDisplay<DI, MODEL, RST>,
     pub line_buffer: &'a mut [Rgb565Pixel],
+}
+
+impl<DI, RST> DrawBuffer<'_, DI, RM67162, RST>
+where
+    DI: Interface<Word = u8>,
+    RST: OutputPin,
+{
+    pub fn new<'a>(
+        di: DI,
+        line_buffer: &'a mut [Rgb565Pixel],
+        rst: RST,
+        delay: &mut Delay,
+    ) -> DrawBuffer<'a, DI, RM67162, RST> {
+        // Initialize display
+        let display = Builder::new(RM67162, di)
+            .orientation(Orientation {
+                mirrored: false,
+                rotation: Rotation::Deg270,
+            })
+            .reset_pin(rst)
+            .init(delay)
+            .unwrap();
+
+        DrawBuffer {
+            display,
+            line_buffer,
+        }
+    }
 }
 
 impl<DI, RST> LineBufferProvider for &mut DrawBuffer<'_, DI, RM67162, RST>
