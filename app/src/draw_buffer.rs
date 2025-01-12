@@ -2,10 +2,9 @@ use embedded_graphics_core::pixelcolor::raw::RawU16;
 use embedded_hal::digital::OutputPin;
 use esp_hal::delay::Delay;
 use mipidsi::interface::{Interface, InterfacePixelFormat};
-use mipidsi::models::Model;
+use mipidsi::models::{Model, RM67162};
 use mipidsi::options::{Orientation, Rotation};
 use mipidsi::{Builder, Display as MipiDisplay};
-use s3_display_amoled_touch_drivers::rm67162::RM67162;
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
 pub struct DrawBuffer<'a, DI, MODEL, RST>
