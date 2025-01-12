@@ -2595,7 +2595,7 @@ dependencies = [
 [[package]]
 name = "mipidsi"
 version = "0.9.0"
-source = "git+https://github.com/psytraxx/mipidsi.git?branch=model-RM67162#c75bc11bd9258f6ac48df80234fdc03e0f65b1a4"
+source = "git+https://github.com/psytraxx/mipidsi.git?branch=model-RM67162#ee8d927f831845007853d962d0486c9263332546"
 dependencies = [
  "embedded-graphics-core",
  "embedded-hal 1.0.0",
