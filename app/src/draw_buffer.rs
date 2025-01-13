@@ -1,11 +1,10 @@
 use embedded_graphics_core::pixelcolor::raw::RawU16;
-use embedded_graphics_core::Drawable;
 use embedded_hal::digital::OutputPin;
 use esp_hal::delay::Delay;
 use mipidsi::interface::{Interface, InterfacePixelFormat};
 use mipidsi::models::{Model, RM67162};
 use mipidsi::options::{Orientation, Rotation};
-use mipidsi::{Builder, Display as MipiDisplay, TestImage};
+use mipidsi::{Builder, Display};
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
 pub struct DrawBuffer<'a, DI, MODEL, RST>
@@ -15,7 +14,7 @@ where
     MODEL::ColorFormat: InterfacePixelFormat<DI::Word>,
     RST: OutputPin,
 {
-    pub display: MipiDisplay<DI, MODEL, RST>,
+    pub display: Display<DI, MODEL, RST>,
     pub line_buffer: &'a mut [Rgb565Pixel],
 }
 
@@ -31,7 +30,7 @@ where
         delay: &mut Delay,
     ) -> DrawBuffer<'a, DI, RM67162, RST> {
         // Initialize display
-        let mut display = Builder::new(RM67162, di)
+        let display = Builder::new(RM67162, di)
             .orientation(Orientation {
                 mirrored: false,
                 rotation: Rotation::Deg270,
@@ -39,8 +38,6 @@ where
             .reset_pin(rst)
             .init(delay)
             .unwrap();
-
-        TestImage::new().draw(&mut display).unwrap();
 
         DrawBuffer {
             display,
@@ -66,7 +63,6 @@ where
 
         render_fn(buffer);
 
-        /*         // We send empty data just to get the device in the right window
         self.display
             .set_pixels(
                 range.start as u16,
@@ -75,6 +71,6 @@ where
                 line as u16,
                 buffer.iter().map(|x| RawU16::new(x.0).into()),
             )
-            .expect("set_pixels failed"); */
+            .expect("set_pixels failed");
     }
 }
