@@ -7,12 +7,12 @@ use alloc::rc::Rc;
 use alloc::string::ToString;
 use core::cell::RefCell;
 use critical_section::Mutex;
-use defmt::{error, info};
 use draw_buffer::DrawBuffer;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::CriticalSectionDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use esp_alloc::psram_allocator;
+use esp_backtrace as _;
 use esp_hal::delay::Delay;
 use esp_hal::dma::{Dma, DmaRxBuf, DmaTxBuf};
 use esp_hal::gpio::{Input, Level, Output, Pull};
@@ -21,12 +21,12 @@ use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, prelude::*};
+use log::{error, info};
 use mipidsi::interface::SpiInterface;
 use s3_display_amoled_touch_drivers::{bq25896::BQ25896, cst816s::CST816S};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel};
 use slint::platform::{Platform, PointerEventButton};
 use slint::{LogicalPosition, PhysicalSize};
-use {defmt_rtt as _, esp_backtrace as _};
 
 slint::include_modules!();
 
@@ -49,6 +49,7 @@ const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
 
 #[entry]
 fn main() -> ! {
+    esp_println::logger::init_logger_from_env();
     esp_alloc::heap_allocator!(72 * 1024);
 
     // Initialize delay

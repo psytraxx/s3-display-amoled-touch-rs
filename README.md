@@ -27,8 +27,6 @@ Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
 - [esp-backtrace](https://crates.io/crates/esp-backtrace) - Provides backtrace support for ESP32-S3.
 - [esp-hal](https://crates.io/crates/esp-hal) - Hardware abstraction layer for the ESP32-S3.
 - [esp-alloc](https://crates.io/crates/esp-alloc) - Memory allocator for ESP32.
-- [defmt](https://crates.io/crates/defmt) - Logging framework designed for embedded systems.
-- [defmt-rtt](https://crates.io/crates/defmt-rtt) - RTT transport for defmt.
 - [embedded-hal](https://crates.io/crates/embedded-hal) - Traits for embedded hardware abstractions.
 - [embassy-embedded-hal](https://crates.io/crates/embassy-embedded-hal) - Async implementations of embedded-hal traits.
 - [esp-hal-embassy](https://crates.io/crates/esp-hal-embassy) - Integration of esp-hal with Embassy.
