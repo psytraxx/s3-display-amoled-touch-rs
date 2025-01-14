@@ -2,10 +2,9 @@ use embedded_graphics_core::pixelcolor::raw::RawU16;
 use embedded_hal::digital::OutputPin;
 use esp_hal::delay::Delay;
 use mipidsi::interface::{Interface, InterfacePixelFormat};
-use mipidsi::models::Model;
+use mipidsi::models::{Model, RM67162};
 use mipidsi::options::{Orientation, Rotation};
-use mipidsi::{Builder, Display as MipiDisplay};
-use s3_display_amoled_touch_drivers::rm67162::RM67162;
+use mipidsi::{Builder, Display};
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
 pub struct DrawBuffer<'a, DI, MODEL, RST>
@@ -15,7 +14,7 @@ where
     MODEL::ColorFormat: InterfacePixelFormat<DI::Word>,
     RST: OutputPin,
 {
-    pub display: MipiDisplay<DI, MODEL, RST>,
+    pub display: Display<DI, MODEL, RST>,
     pub line_buffer: &'a mut [Rgb565Pixel],
 }
 
@@ -64,7 +63,6 @@ where
 
         render_fn(buffer);
 
-        // We send empty data just to get the device in the right window
         self.display
             .set_pixels(
                 range.start as u16,
