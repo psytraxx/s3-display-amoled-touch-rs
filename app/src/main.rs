@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
 use core::cell::RefCell;
+use core::time::Duration;
 use critical_section::Mutex;
 use draw_buffer::DrawBuffer;
 use embedded_hal::i2c::I2c as I2CBus;
@@ -13,14 +14,17 @@ use embedded_hal_bus::i2c::CriticalSectionDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use esp_alloc::psram_allocator;
 use esp_backtrace as _;
+use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
-use esp_hal::dma::{Dma, DmaRxBuf, DmaTxBuf};
+use esp_hal::dma::{DmaRxBuf, DmaTxBuf};
 use esp_hal::gpio::{Input, Level, Output, Pull};
 use esp_hal::i2c::master::I2c;
 use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
-use esp_hal::timer::systimer::SystemTimer;
+use esp_hal::spi::Mode;
+use esp_hal::time::now;
+use esp_hal::time::RateExtU32;
 use esp_hal::xtensa_lx::singleton;
-use esp_hal::{dma_buffers, prelude::*};
+use esp_hal::{dma_buffers, main};
 use log::{error, info};
 use mipidsi::interface::SpiInterface;
 use s3_display_amoled_touch_drivers::{bq25896::BQ25896, cst816s::CST816S};
@@ -47,7 +51,7 @@ const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
 // https://github.com/Yandrik/kolibri-cyd-evaluation-apps/blob/b089aef31cc64e294bd64b2032356fb70789ad65/app/src/bin/exapp-slint-timer.rs#L56
 // for the initial code
 
-#[entry]
+#[main]
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
     esp_alloc::heap_allocator!(72 * 1024);
@@ -58,7 +62,7 @@ fn main() -> ! {
     // Initialize peripherals
     let peripherals = esp_hal::init({
         let mut config = esp_hal::Config::default();
-        config.cpu_clock = CpuClock::Clock240MHz;
+        config.cpu_clock = CpuClock::_240MHz;
         config
     });
 
@@ -67,12 +71,12 @@ fn main() -> ! {
 
     // Initialize I2C bus
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
+        .unwrap()
         .with_sda(peripherals.GPIO3)
-        .with_scl(peripherals.GPIO2)
-        .into_async();
+        .with_scl(peripherals.GPIO2);
 
     let i2c_ref_cell =
-        singleton!(:Mutex<RefCell<I2c<'_, esp_hal::Async>>> = Mutex::new(RefCell::new(i2c)))
+        singleton!(:Mutex<RefCell<I2c<'_, esp_hal::Blocking>>> = Mutex::new(RefCell::new(i2c)))
             .expect("Failed to create I2C mutex");
 
     // Initialize BQ25896 charger
@@ -97,30 +101,26 @@ fn main() -> ! {
     detect_spi_model(CriticalSectionDevice::new(i2c_ref_cell));
 
     // Initialize PMICEN pin
-    let mut pmicen = Output::new_typed(peripherals.GPIO38, Level::Low);
+    let mut pmicen = Output::new(peripherals.GPIO38, Level::Low);
     pmicen.set_high();
     info!("PMICEN set high");
 
     // Initialize display SPI peripherals
-    let dma = Dma::new(peripherals.DMA);
     let sck = Output::new(peripherals.GPIO47, Level::Low);
     let mosi = Output::new(peripherals.GPIO18, Level::Low);
     let cs = Output::new(peripherals.GPIO6, Level::High);
 
     // Configure SPI
-    let spi = Spi::new_with_config(
+    let spi = Spi::new(
         peripherals.SPI2,
-        Config {
-            frequency: 75.MHz(),
-            ..Config::default()
-        },
+        Config::default()
+            .with_frequency(75_u32.MHz())
+            .with_mode(Mode::_0),
     )
+    .unwrap()
     .with_sck(sck)
     .with_mosi(mosi)
-    .with_dma(
-        dma.channel0
-            .configure(false, esp_hal::dma::DmaPriority::Priority0),
-    );
+    .with_dma(peripherals.DMA_CH0);
 
     // Configure SPI DMA buffers
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
@@ -243,9 +243,7 @@ impl Platform for Backend {
 
     fn duration_since_start(&self) -> core::time::Duration {
         // Calculate duration since start
-        core::time::Duration::from_millis(
-            SystemTimer::now() * 1_000 / SystemTimer::ticks_per_second(),
-        )
+        Duration::from_millis(now().duration_since_epoch().to_millis())
     }
 
     fn debug_log(&self, arguments: core::fmt::Arguments) {
