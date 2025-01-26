@@ -27,6 +27,7 @@ use esp_hal::time::RateExtU32;
 use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, main};
 use mipidsi::interface::SpiInterface;
+use s3_display_amoled_touch_drivers::bq25896::ChargeStatus;
 use s3_display_amoled_touch_drivers::{bq25896::BQ25896, cst816s::CST816S};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel};
 use slint::platform::{Platform, PointerEventButton};
@@ -127,8 +128,6 @@ fn main() -> ! {
 
     info!("Fast charge current limit: {}", fast_charge_current_limit);
 
-    pmu.set_charge_enable().expect("set_charge_enable failed");
-
     info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
 
     // Initialize touchpad
@@ -201,8 +200,17 @@ fn main() -> ! {
         move || {
             info!("update pmu readings");
 
+            let not_charging = pmu.get_charge_status().expect("get_charge_status failed")
+                == ChargeStatus::NoCharge;
+            if not_charging {
+                pmu.set_charge_enable().expect("set_charge_enable failed");
+            } else {
+                pmu.set_charge_disabled()
+                    .expect("set_charge_disabled failed");
+            }
+
             let ui = ui_handle.unwrap();
-            let text = pmu.get_info().unwrap();
+            let text = pmu.get_info().expect("get_info failed");
             ui.set_text(text.clone().into());
         }
     });

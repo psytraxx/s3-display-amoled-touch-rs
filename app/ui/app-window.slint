@@ -1,12 +1,15 @@
-import { HorizontalBox, VerticalBox, Button } from "std-widgets.slint";
+import { HorizontalBox, VerticalBox, Button, CheckBox } from "std-widgets.slint";
 export component AppWindow inherits Window {
     in-out property <string> text: "Please touch the button \nto update the PMU reading";
-    width: 536px;
     in-out property <image> status-icon: @image-url("../assets/battery.png");
-    default-font-size: 22px;
+    width: 536px;
     height: 240px;
+
+    default-font-size: 22px;
+
     callback request-update();
     HorizontalBox {
+        preferred-width: 0cm;
 
         Text {
             text: root.text;
@@ -18,19 +21,17 @@ export component AppWindow inherits Window {
 
             Image {
                 source: root.status-icon;
-                width: 64px;
-                height: 64px;
+                width: 40px;
+                height: 40px;
             }
 
-            HorizontalBox {
-                Button {
-                    primary: true;
-                    text: "Update";
-                    width: 120px;
-                    height: 80px;
-                    clicked => {
-                        root.request-update();
-                    }
+            Button {
+                primary: true;
+                text: "Update";
+                width: 120px;
+                height: 80px;
+                clicked => {
+                    root.request-update();
                 }
             }
         }
