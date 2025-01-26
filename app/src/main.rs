@@ -86,9 +86,43 @@ fn main() -> ! {
     )
     .expect("BQ25896 init failed");
 
+    // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
+    pmu.set_charge_target_voltage(4208)
+        .expect("set_charge_target_voltage failed");
+
+    let charge_target_voltage = pmu
+        .get_charge_target_voltage()
+        .expect("get_charge_target_voltage failed");
+    info!("Charge target voltage: {}", charge_target_voltage);
+
+    // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
+    pmu.set_precharge_current(128)
+        .expect("set_precharge_current_limit failed");
+
+    let precharge_current = pmu
+        .get_precharge_current()
+        .expect("get_precharge_current failed");
+
+    info!("Precharge current: {}", precharge_current);
+
+    // The premise is that Limit Pin is disabled, or it will only follow the maximum charging current set by Limit Pin.
+    // Set the charging current , Range:0~5056mA ,step:64mA
+    pmu.set_charger_constantcurr(1536)
+        .expect("set_charger_constantcurr failed");
+
+    let constantcurr = pmu
+        .get_charger_constantcurr()
+        .expect("get_charger_constantcurr failed");
+
+    info!("Charger constant current: {}", constantcurr);
+
     pmu.set_adc_enabled().expect("set_adc_enabled failed");
-    pmu.set_fast_charge_current_limit(2048)
+
+    pmu.set_fast_charge_current_limit(1024)
         .expect("set_fast_charge_current_limit failed");
+
+    pmu.set_charge_enable(true)
+        .expect("set_charge_enable failed");
 
     info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
 
@@ -174,6 +208,10 @@ fn main() -> ! {
         // Update timers and animations
         slint::platform::update_timers_and_animations();
 
+        if window.has_active_animations() {
+            continue;
+        }
+
         // Read touch events
         if let Some(touch_event) = touchpad.read_touch(true).expect("read touch failed") {
             let position = LogicalPosition::new(
@@ -203,9 +241,6 @@ fn main() -> ! {
         window.draw_if_needed(|renderer| {
             renderer.render_by_line(&mut buffer_provider);
         });
-        if window.has_active_animations() {
-            continue;
-        }
     }
 }
 

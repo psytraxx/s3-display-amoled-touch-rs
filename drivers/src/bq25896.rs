@@ -218,6 +218,126 @@ where
         self.write_register(ICHG, val)
     }
 
+    pub fn set_charge_target_voltage(&mut self, target_voltage: u16) -> Result<(), PmuSensorError> {
+        const VREG: u8 = 0x06; // Charge voltage limit register
+        const VOLTAGE_BASE: u16 = 3840; // Min voltage in mV
+        const VOLTAGE_MAX: u16 = 4608; // Max voltage in mV
+        const VOLTAGE_STEP: u16 = 16; // Step size in mV
+
+        // Check if voltage is multiple of step size
+        if target_voltage % VOLTAGE_STEP != 0 {
+            return Err(PmuSensorError::VoltageStepInvalid);
+        }
+
+        // Clamp voltage to valid range
+        let voltage = target_voltage.clamp(VOLTAGE_BASE, VOLTAGE_MAX);
+
+        // Read current register value
+        let mut val = self.read_register(&[VREG])?;
+
+        // Clear bits 7:2, keep bits 1:0
+        val &= 0x03;
+
+        // Calculate and set new voltage bits
+        val |= (((voltage - VOLTAGE_BASE) / VOLTAGE_STEP) << 2) as u8;
+
+        // Write back to register
+        self.write_register(VREG, val)
+    }
+
+    pub fn get_charge_target_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        const VREG: u8 = 0x06;
+        const VOLTAGE_BASE: u16 = 3840;
+        const VOLTAGE_MAX: u16 = 4608;
+        const VOLTAGE_STEP: u16 = 16;
+        const MAX_VAL: u8 = 0x30;
+
+        let val = self.read_register(&[VREG])?;
+        let bits = (val & 0xFC) >> 2;
+
+        if bits > MAX_VAL {
+            return Ok(VOLTAGE_MAX);
+        }
+
+        Ok(VOLTAGE_BASE + (bits as u16 * VOLTAGE_STEP))
+    }
+
+    pub fn set_precharge_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
+        const REG_ADDR: u8 = 0x05;
+        const CURRENT_STEP: u16 = 64; // 64mA per step
+        const CURRENT_MIN: u16 = 64; // 64mA minimum
+        const CURRENT_MAX: u16 = 1024; // 1024mA maximum
+        const CURRENT_BASE: u16 = 64; // Base current value
+
+        // Validate step size
+        if milliampere % CURRENT_STEP != 0 {
+            return Err(PmuSensorError::CurrentStepInvalid);
+        }
+
+        // Clamp to valid range
+        let current = milliampere.clamp(CURRENT_MIN, CURRENT_MAX);
+
+        // Read current register value
+        let mut val = self.read_register(&[REG_ADDR])?;
+
+        // Clear bits 7:4, keep bits 3:0
+        val &= 0x0F;
+
+        // Calculate new current bits and shift to position
+        let current_bits = ((current - CURRENT_BASE) / CURRENT_STEP) as u8;
+        val |= current_bits << 4;
+
+        // Write back to register
+        self.write_register(REG_ADDR, val)
+    }
+
+    pub fn get_precharge_current(&mut self) -> Result<u16, PmuSensorError> {
+        const REG_ADDR: u8 = 0x05;
+        const CURRENT_STEP: u16 = 64; // 64mA per step
+        const CURRENT_BASE: u16 = 64; // Base current value
+
+        let val = self.read_register(&[REG_ADDR])?;
+        let bits = (val & 0xF0) >> 4;
+
+        Ok(CURRENT_BASE + (bits as u16 * CURRENT_STEP))
+    }
+
+    pub fn set_charger_constantcurr(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
+        const REG_ADDR: u8 = 0x04;
+        const CURRENT_STEP: u16 = 64; // 64mA per step
+        const CURRENT_MAX: u16 = 3008; // 3008mA maximum
+
+        // Check if current is multiple of step size
+        if milliampere % CURRENT_STEP != 0 {
+            return Err(PmuSensorError::CurrentStepInvalid);
+        }
+
+        // Clamp to max value
+        let current = milliampere.min(CURRENT_MAX);
+
+        // Read current register value
+        let mut val = self.read_register(&[REG_ADDR])?;
+
+        // Clear bits 6:0, keep bit 7
+        val &= 0x80;
+
+        // Calculate and set new current bits
+        val |= (current / CURRENT_STEP) as u8;
+
+        // Write back to register
+        self.write_register(REG_ADDR, val)
+    }
+
+    pub fn get_charger_constantcurr(&mut self) -> Result<u16, PmuSensorError> {
+        const REG_ADDR: u8 = 0x04;
+        const CURRENT_STEP: u16 = 64; // 64mA per step
+
+        let val = self.read_register(&[REG_ADDR])?;
+        let bits = val & 0x7F; // Extract bits 6:0
+
+        Ok(bits as u16 * CURRENT_STEP)
+    }
+
     pub fn get_info(&mut self) -> Result<String, PmuSensorError> {
         let is_vbus_present = self.is_vbus_in()?;
         self.set_charge_enable(!is_vbus_present)?;
@@ -260,6 +380,10 @@ pub enum PmuSensorError {
     CurrentChargeLimitExceeded,
     // Invalid charge step limit (must be multiple of 64)
     CurrentChargeStepLimitInvalid,
+    // Voltage step invalid (must be multiple of 16)
+    VoltageStepInvalid,
+    // Current step invalid (must be multiple of 64)
+    CurrentStepInvalid,
 }
 
 /// Status of the power input source
