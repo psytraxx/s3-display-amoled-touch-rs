@@ -121,8 +121,13 @@ fn main() -> ! {
     pmu.set_fast_charge_current_limit(1024)
         .expect("set_fast_charge_current_limit failed");
 
-    pmu.set_charge_enable(true)
-        .expect("set_charge_enable failed");
+    let fast_charge_current_limit = pmu
+        .get_fast_charge_current_limit()
+        .expect("get_fast_charge_current_limit failed");
+
+    info!("Fast charge current limit: {}", fast_charge_current_limit);
+
+    pmu.set_charge_enable().expect("set_charge_enable failed");
 
     info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
 

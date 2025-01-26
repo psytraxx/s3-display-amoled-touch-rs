@@ -3,9 +3,6 @@ use core::fmt::{self, Display, Formatter};
 use alloc::string::String;
 use embedded_hal::i2c::I2c;
 use libm::{log, round};
-
-/// Handles all operations on/with Mpu6050
-/// https://github.com/andhieSetyabudi/BQ25896/blob/master/BQ25896.h
 /// https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series/blob/master/libdeps/XPowersLib/src/PowersBQ25896.tpp
 ///
 /// BQ25896 battery charging and power path management IC driver.
@@ -25,21 +22,25 @@ pub struct BQ25896<I2C> {
 
 // Register address constants with documentation
 /// ADC control register - enables ADC features
-const ADC_CTRL: u8 = 0x02;
+const REG_02: u8 = 0x02;
 /// System control register - charge enable/disable
-const SYS_CTRL: u8 = 0x03;
-// Charge current control register
-const ICHG: u8 = 0x04;
-/// Battery voltage register
-const BATV: u8 = 0x0E;
-/// System voltage register  
-const SYSV: u8 = 0x0F;
-/// Bus status register - input source detection
-const VBUS_STAT: u8 = 0x0B;
-/// Temperature register - NTC readings
-const TSPCT: u8 = 0x10;
-/// USB bus voltage register
-const VBUSV: u8 = 0x11;
+const REG_03: u8 = 0x03;
+// Fast Charge current control register
+const REG_04: u8 = 0x04;
+// Precharge current control, Termination Current Limit register
+const REG_05: u8 = 0x05;
+// Charge Voltage Limit control register, also Battery Recharge Threshold Offset, Battery Precharge to Fast Charge Threshold
+const REG_06: u8 = 0x06;
+/// VBus status register - input source detection, Charging Status, Power Good Status,VSYS Regulation Status
+const REG_0B: u8 = 0x0B;
+/// Battery voltage register (ADC conversion of Battery Voltage (VBAT))
+const REG_0E: u8 = 0x0E;
+/// System voltage register  (ADDC conversion of System Voltage (VSYS))
+const REG_0F: u8 = 0x0F;
+/// Temperature register - NTC readings ADC conversion of TS Voltage (TS) as percentage of REGN
+const REG_10: u8 = 0x10;
+/// USB bus voltage register (ADC conversion of VBUS voltage (VBUS))
+const REG_11: u8 = 0x11;
 
 impl<I2C> BQ25896<I2C>
 where
@@ -81,10 +82,10 @@ where
 
     /// Enables ADC conversion for voltage and current monitoring
     pub fn set_adc_enabled(&mut self) -> Result<(), PmuSensorError> {
-        let mut data = self.read_register(&[ADC_CTRL])?;
+        let mut data = self.read_register(&[REG_02])?;
         data |= 1 << 7; // Start ADC conversion
         data |= 1 << 6; // Set continuous conversion
-        self.write_register(ADC_CTRL, data)
+        self.write_register(REG_02, data)
     }
 
     pub fn get_chip_id(&mut self) -> Result<u8, PmuSensorError> {
@@ -93,24 +94,27 @@ where
     }
 
     pub fn get_charge_status(&mut self) -> Result<ChargeStatus, PmuSensorError> {
-        let val = self.read_register(&[VBUS_STAT])?;
+        let val = self.read_register(&[REG_0B])?;
         let result = (val >> 3) & 0x03;
         Ok(result.into())
     }
 
-    pub fn set_charge_enable(&mut self, enabled: bool) -> Result<(), PmuSensorError> {
-        let mut data = self.read_register(&[SYS_CTRL])?;
+    pub fn set_charge_enable(&mut self) -> Result<(), PmuSensorError> {
+        const CHARGE_ENABLE_BIT: u8 = 4;
 
-        match enabled {
-            false => data &= !(1 << 4),
-            true => data |= 1 << 4,
-        }
+        let val = self.read_register(&[REG_03])?;
+        self.write_register(REG_03, val | (1 << CHARGE_ENABLE_BIT))
+    }
 
-        self.write_register(SYS_CTRL, data)
+    pub fn set_charge_disabled(&mut self) -> Result<(), PmuSensorError> {
+        const CHARGE_ENABLE_BIT: u8 = 4;
+
+        let val = self.read_register(&[REG_03])?;
+        self.write_register(REG_03, val & !(1 << CHARGE_ENABLE_BIT))
     }
 
     pub fn get_bus_status(&mut self) -> Result<BusStatus, PmuSensorError> {
-        let val = self.read_register(&[VBUS_STAT])?;
+        let val = self.read_register(&[REG_0B])?;
         let result = (val >> 5) & 0x07;
         Ok(result.into())
     }
@@ -123,7 +127,7 @@ where
     /// Gets battery voltage in millivolts
     /// Returns voltage_mv
     pub fn get_battery_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let data: u8 = self.read_register(&[BATV])?;
+        let data: u8 = self.read_register(&[REG_0E])?;
         if data == 0 {
             return Ok(0);
         }
@@ -140,7 +144,7 @@ where
     /// Returns the USB voltage
     /// Gets USB bus voltage in millivolts
     pub fn get_vbus_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let data = self.read_register(&[VBUSV])?;
+        let data = self.read_register(&[REG_11])?;
 
         let vbus_attached = ((data >> 7) & 0x01) == 0;
         if vbus_attached {
@@ -154,7 +158,7 @@ where
 
     /// Gets system voltage in millivolts
     pub fn get_sys_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let data = self.read_register(&[SYSV])?;
+        let data = self.read_register(&[REG_0F])?;
         let data = data & 0x7F;
         if data == 0 {
             return Ok(0);
@@ -184,7 +188,7 @@ where
 
     /// Gets battery temperature in Celsius from NTC thermistor
     pub fn get_temperature(&mut self) -> Result<f64, PmuSensorError> {
-        let data = self.read_register(&[TSPCT])?;
+        let data = self.read_register(&[REG_10])?;
         let data = data & 0x7F;
         let ntc_percent = (data as f64) * 0.465_f64 + 21_f64;
 
@@ -196,7 +200,7 @@ where
 
     /// Gets the fast charge current limit in mA
     pub fn get_fast_charge_current_limit(&mut self) -> Result<u16, PmuSensorError> {
-        let data = self.read_register(&[ICHG])?;
+        let data = self.read_register(&[REG_04])?;
 
         let data = data & 0x7F;
         let val = (data as u16) * 64;
@@ -212,14 +216,13 @@ where
         if current > 3008 {
             return Err(PmuSensorError::CurrentChargeLimitExceeded);
         }
-        let mut val = self.read_register(&[ICHG])?;
+        let mut val = self.read_register(&[REG_04])?;
         val &= 0x80;
         val |= (current / CHARGE_STEP) as u8;
-        self.write_register(ICHG, val)
+        self.write_register(REG_04, val)
     }
 
     pub fn set_charge_target_voltage(&mut self, target_voltage: u16) -> Result<(), PmuSensorError> {
-        const VREG: u8 = 0x06; // Charge voltage limit register
         const VOLTAGE_BASE: u16 = 3840; // Min voltage in mV
         const VOLTAGE_MAX: u16 = 4608; // Max voltage in mV
         const VOLTAGE_STEP: u16 = 16; // Step size in mV
@@ -233,7 +236,7 @@ where
         let voltage = target_voltage.clamp(VOLTAGE_BASE, VOLTAGE_MAX);
 
         // Read current register value
-        let mut val = self.read_register(&[VREG])?;
+        let mut val = self.read_register(&[REG_06])?;
 
         // Clear bits 7:2, keep bits 1:0
         val &= 0x03;
@@ -242,17 +245,16 @@ where
         val |= (((voltage - VOLTAGE_BASE) / VOLTAGE_STEP) << 2) as u8;
 
         // Write back to register
-        self.write_register(VREG, val)
+        self.write_register(REG_06, val)
     }
 
     pub fn get_charge_target_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        const VREG: u8 = 0x06;
         const VOLTAGE_BASE: u16 = 3840;
         const VOLTAGE_MAX: u16 = 4608;
         const VOLTAGE_STEP: u16 = 16;
         const MAX_VAL: u8 = 0x30;
 
-        let val = self.read_register(&[VREG])?;
+        let val = self.read_register(&[REG_06])?;
         let bits = (val & 0xFC) >> 2;
 
         if bits > MAX_VAL {
@@ -263,7 +265,6 @@ where
     }
 
     pub fn set_precharge_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
-        const REG_ADDR: u8 = 0x05;
         const CURRENT_STEP: u16 = 64; // 64mA per step
         const CURRENT_MIN: u16 = 64; // 64mA minimum
         const CURRENT_MAX: u16 = 1024; // 1024mA maximum
@@ -278,7 +279,7 @@ where
         let current = milliampere.clamp(CURRENT_MIN, CURRENT_MAX);
 
         // Read current register value
-        let mut val = self.read_register(&[REG_ADDR])?;
+        let mut val = self.read_register(&[REG_05])?;
 
         // Clear bits 7:4, keep bits 3:0
         val &= 0x0F;
@@ -288,22 +289,20 @@ where
         val |= current_bits << 4;
 
         // Write back to register
-        self.write_register(REG_ADDR, val)
+        self.write_register(REG_05, val)
     }
 
     pub fn get_precharge_current(&mut self) -> Result<u16, PmuSensorError> {
-        const REG_ADDR: u8 = 0x05;
         const CURRENT_STEP: u16 = 64; // 64mA per step
         const CURRENT_BASE: u16 = 64; // Base current value
 
-        let val = self.read_register(&[REG_ADDR])?;
+        let val = self.read_register(&[REG_05])?;
         let bits = (val & 0xF0) >> 4;
 
         Ok(CURRENT_BASE + (bits as u16 * CURRENT_STEP))
     }
 
     pub fn set_charger_constantcurr(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
-        const REG_ADDR: u8 = 0x04;
         const CURRENT_STEP: u16 = 64; // 64mA per step
         const CURRENT_MAX: u16 = 3008; // 3008mA maximum
 
@@ -316,7 +315,7 @@ where
         let current = milliampere.min(CURRENT_MAX);
 
         // Read current register value
-        let mut val = self.read_register(&[REG_ADDR])?;
+        let mut val = self.read_register(&[REG_04])?;
 
         // Clear bits 6:0, keep bit 7
         val &= 0x80;
@@ -325,14 +324,13 @@ where
         val |= (current / CURRENT_STEP) as u8;
 
         // Write back to register
-        self.write_register(REG_ADDR, val)
+        self.write_register(REG_04, val)
     }
 
     pub fn get_charger_constantcurr(&mut self) -> Result<u16, PmuSensorError> {
-        const REG_ADDR: u8 = 0x04;
         const CURRENT_STEP: u16 = 64; // 64mA per step
 
-        let val = self.read_register(&[REG_ADDR])?;
+        let val = self.read_register(&[REG_04])?;
         let bits = val & 0x7F; // Extract bits 6:0
 
         Ok(bits as u16 * CURRENT_STEP)
@@ -340,7 +338,6 @@ where
 
     pub fn get_info(&mut self) -> Result<String, PmuSensorError> {
         let is_vbus_present = self.is_vbus_in()?;
-        self.set_charge_enable(!is_vbus_present)?;
 
         let is_vbus_present = match is_vbus_present {
             true => "Yes",
