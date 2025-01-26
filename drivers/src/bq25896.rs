@@ -21,6 +21,9 @@ pub struct BQ25896<I2C> {
 }
 
 // Register address constants with documentation
+
+/// Set Boost Mode Hot/Cold Temperature Monitor Threshold,Input Voltage Limit Offset
+const REG_01: u8 = 0x01;
 /// ADC control register - enables ADC features
 const REG_02: u8 = 0x02;
 /// System control register - charge enable/disable
@@ -78,6 +81,54 @@ where
         self.i2c
             .write(self.adr, &[reg, data])
             .map_err(|_| PmuSensorError::WriteRegister)
+    }
+
+    /// Sets the boost mode hot temperature monitor threshold
+    pub fn set_boost_mode_hot_temp_threshold(
+        &mut self,
+        threshold: BoostHotThreshold,
+    ) -> Result<(), PmuSensorError> {
+        let val = self.read_register(&[REG_01])?;
+        let new_val = (val & 0x3F) | ((threshold as u8) << 6);
+        self.write_register(REG_01, new_val)
+    }
+
+    ///  Boost Mode Cold Temperature Monitor Threshold
+    pub fn set_boost_mode_cold_temp_threshold(
+        &mut self,
+        threshold: BoostColdThreshold,
+    ) -> Result<(), PmuSensorError> {
+        let val = self.read_register(&[REG_01])?;
+        let new_val = (val & 0x01) | ((threshold as u8) << 5);
+        self.write_register(REG_01, new_val)
+    }
+
+    /// Input Voltage Limit Offset
+    /// Default: 600mV (00110)
+    /// Range: 0mV – 3100mV
+    /// Minimum VINDPM threshold is clamped at 3.9V
+    /// Maximum VINDPM threshold is clamped at 15.3V
+    /// When VBUS at noLoad is ≤ 6V, the VINDPM_OS is used to calculate VINDPM threhold
+    /// When VBUS at noLoad is > 6V, the VINDPM_OS multiple by 2 is used to calculate VINDPM threshold.
+    pub fn set_input_voltage_limit_offset(
+        &mut self,
+        mut millivolt: u16,
+    ) -> Result<(), PmuSensorError> {
+        const POWERS_BQ25896_IN_CURRENT_OFFSET_MAX: u16 = 3100;
+        const POWERS_BQ25896_IN_CURRENT_OFFSET_STEP: u16 = 100;
+        // Validate step size
+        if millivolt % POWERS_BQ25896_IN_CURRENT_OFFSET_STEP != 0 {
+            return Err(PmuSensorError::InvalidVolatageStep);
+        }
+
+        if millivolt > POWERS_BQ25896_IN_CURRENT_OFFSET_MAX {
+            millivolt = POWERS_BQ25896_IN_CURRENT_OFFSET_MAX;
+        }
+
+        let steps = millivolt / POWERS_BQ25896_IN_CURRENT_OFFSET_STEP;
+        let val = self.read_register(&[REG_01])?;
+        let new_val = (val & 0xE0) | (steps as u8);
+        self.write_register(REG_01, new_val)
     }
 
     /// Enables ADC conversion for voltage and current monitoring
@@ -381,6 +432,8 @@ pub enum PmuSensorError {
     VoltageStepInvalid,
     // Current step invalid (must be multiple of 64)
     CurrentStepInvalid,
+    // Invalid voltage step (must be multiple of 100)
+    InvalidVolatageStep,
 }
 
 /// Status of the power input source
@@ -453,4 +506,19 @@ impl From<u8> for ChargeStatus {
             _ => ChargeStatus::Unknown,
         }
     }
+}
+
+/// Boost mode hot temperature monitor threshold
+#[derive(Debug, Clone, Copy)]
+pub enum BoostHotThreshold {
+    VBHOT1 = 0x00,   // Threshold (34.75%) (default)
+    VBHOT0 = 0x01,   // Threshold (Typ. 37.75%)
+    VBHOT2 = 0x02,   // Threshold (Typ. 31.25%)
+    Disabled = 0x03, // Disable boost mode thermal protection
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BoostColdThreshold {
+    VBCOLD0 = 0x00, // (Typ. 77%) (default)
+    VBCOLD1 = 0x01, // (Typ. 80%)
 }
