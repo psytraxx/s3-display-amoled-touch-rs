@@ -99,8 +99,7 @@ where
     }
 
     pub fn is_hiz_mode(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x00, 7)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x00, 7)
     }
 
     pub fn enable_current_limit_pin(&mut self) -> Result<(), PmuSensorError> {
@@ -112,8 +111,7 @@ where
     }
 
     pub fn is_enable_current_limit_pin(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x00, 6)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x00, 6)
     }
 
     pub fn set_input_current_limit(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
@@ -228,7 +226,7 @@ where
     // Get boost frequency
     pub fn get_boost_freq(&mut self) -> Result<BoostFreq, PmuSensorError> {
         let bit = self.dev.get_register_bit(0x02, 5)?;
-        Ok(if bit != 0 {
+        Ok(if bit {
             BoostFreq::Freq500KHz
         } else {
             BoostFreq::Freq1500KHz
@@ -254,8 +252,7 @@ where
     }
 
     pub fn is_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x02, 1)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x02, 1)
     }
 
     // Automatic Input Detection controls
@@ -268,8 +265,7 @@ where
     }
 
     pub fn is_automatic_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x02, 0)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x02, 0)
     }
 
     // REGISTER 0x03
@@ -277,8 +273,7 @@ where
     // Charge Enable Configuration,  Minimum System Voltage Limit, Minimum Battery Voltage (falling) to exit boost mode
 
     pub fn is_bat_load_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x03, 7)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x03, 7)
     }
 
     pub fn disable_bat_load(&mut self) -> Result<(), PmuSensorError> {
@@ -294,8 +289,7 @@ where
     }
 
     pub fn is_otg_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x03, 5)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x03, 5)
     }
 
     pub fn disable_otg(&mut self) -> Result<(), PmuSensorError> {
@@ -329,8 +323,7 @@ where
 
     /// Get charging status
     pub fn is_charge_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x03, 4)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x03, 4)
     }
 
     pub fn set_sys_power_down_voltage(&mut self, millivolt: u16) -> Result<(), PmuSensorError> {
@@ -547,8 +540,7 @@ where
     }
 
     pub fn is_charging_termination_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x07, 7)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x07, 7)
     }
 
     pub fn disable_stat_pin(&mut self) -> Result<(), PmuSensorError> {
@@ -560,8 +552,7 @@ where
     }
 
     pub fn is_stat_pin_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x07, 6)?;
-        Ok(bit == 0)
+        self.dev.get_register_bit(0x07, 6)
     }
 
     pub fn disable_watchdog(&mut self) -> Result<(), PmuSensorError> {
@@ -590,8 +581,7 @@ where
     }
 
     pub fn is_charging_safety_timer_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x07, 3)?;
-        Ok(bit != 0)
+        self.dev.get_register_bit(0x07, 3)
     }
 
     pub fn set_fast_charge_timer(&mut self, timer: FastChargeTimer) -> Result<(), PmuSensorError> {
@@ -788,7 +778,7 @@ where
         }
     }
 
-    // REGISTER 0x0B todo onwards
+    // REGISTER 0x0B
     // VBUS Status register, N/A Charging Status, Power Good Status , VSYS Regulation Status
 
     /// Gets the charge status
@@ -804,6 +794,26 @@ where
         Ok(val != BusStatus::NoInput)
     }
 
+    /// Checks if device is in OTG mode
+    pub fn is_otg(&mut self) -> Result<bool, PmuSensorError> {
+        Ok(self.get_bus_status()? == BusStatus::Otg)
+    }
+
+    /// Checks if device is currently charging
+    pub fn is_charging(&mut self) -> Result<bool, PmuSensorError> {
+        Ok(self.get_charge_status()? != ChargeStatus::NoCharge)
+    }
+
+    /// Checks if charging is complete
+    pub fn is_charge_done(&mut self) -> Result<bool, PmuSensorError> {
+        Ok(self.get_charge_status()? == ChargeStatus::Done)
+    }
+
+    /// Checks power good status
+    pub fn is_power_good(&mut self) -> Result<bool, PmuSensorError> {
+        self.dev.get_register_bit(0x0B, 2)
+    }
+
     /// Gets the bus status
     pub fn get_bus_status(&mut self) -> Result<BusStatus, PmuSensorError> {
         let val = self.dev.read_register(0x0B)?;
@@ -811,7 +821,7 @@ where
         Ok(result.into())
     }
 
-    // REGISTER 0x0C
+    // REGISTER 0x0C todo onwards
     // Watchdog Fault Status, Boost Mode Fault Status, Charge Fault Status, Battery Fault Status, NTC Fault Status
 
     // REGISTER 0x0E
@@ -966,6 +976,20 @@ where
         text.push_str(&format!(
             "Pre charge current: {}mA\n",
             self.get_precharge_current()?
+        ));
+
+        text.push_str(&format!("HIZ mode: {}\n", self.is_hiz_mode()?));
+        text.push_str(&format!(
+            "Automatic input detection: {}\n",
+            self.is_automatic_input_detection_enabled()?
+        ));
+        text.push_str(&format!(
+            "Charging safety timer: {}\n",
+            self.is_charging_safety_timer_enabled()?
+        ));
+        text.push_str(&format!(
+            "Charging safety timer: {}\n",
+            self.is_input_detection_enabled()?
         ));
 
         Ok(text)
@@ -1208,9 +1232,9 @@ where
         self.write_register(&[register, data])
     }
 
-    fn get_register_bit(&mut self, register: u8, bit: u8) -> Result<u8, PmuSensorError> {
+    fn get_register_bit(&mut self, register: u8, bit: u8) -> Result<bool, PmuSensorError> {
         let val = self.read_register(register)?;
-        Ok(val & (1 << bit))
+        Ok((val & (1 << bit)) != 0)
     }
 
     fn clear_register_bit(&mut self, register: u8, bit: u8) -> Result<(), PmuSensorError> {

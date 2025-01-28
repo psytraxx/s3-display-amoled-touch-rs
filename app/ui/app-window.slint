@@ -7,14 +7,14 @@ export component AppWindow inherits Window {
     width: 536px;
     height: 240px;
 
-    default-font-size: 22px;
+    default-font-size: 20px;
 
     callback request-update();
     callback toggle-charger();
 
     HorizontalBox {
         Flickable {
-            viewport-height: 300px;
+            viewport-height: 500px;
             Text {
                 text: root.text;
             }
@@ -41,7 +41,7 @@ export component AppWindow inherits Window {
             }
 
             CheckBox {
-                text: self.checked ? "Disable Charger" : "Enable Charger";
+                text: self.checked ? "Disabled" : "Enabled";
                 checked: root.charging;
                 toggled => {
                     root.toggle-charger();
