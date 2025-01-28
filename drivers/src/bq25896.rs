@@ -501,7 +501,29 @@ where
         Ok(CHG_VOL_BASE + (bits as u16 * CHG_VOL_STEP))
     }
 
-    // REGISTER 0x07
+    /// Sets the battery precharge to fast charge threshold
+    pub fn set_fast_charge_threshold(
+        &mut self,
+        threshold: FastChargeThreshold,
+    ) -> Result<(), PmuSensorError> {
+        match threshold {
+            FastChargeThreshold::Volt2V8 => self.dev.clear_register_bit(0x06, 1),
+            FastChargeThreshold::Volt3V0 => self.dev.set_register_bit(0x06, 1),
+        }
+    }
+
+    /// Sets the battery recharge threshold offset
+    pub fn set_battery_recharge_threshold_offset(
+        &mut self,
+        offset: RechargeThresholdOffset,
+    ) -> Result<(), PmuSensorError> {
+        match offset {
+            RechargeThresholdOffset::Offset100mV => self.dev.clear_register_bit(0x06, 0),
+            RechargeThresholdOffset::Offset200mV => self.dev.set_register_bit(0x06, 0),
+        }
+    }
+
+    // REGISTER 0x07 todo onwards
     // Charging Termination Enable, STAT Pin Disable , I2C Watchdog Timer Setting, Charging Safety Timer Enable
     // Fast Charge Timer Setting, JEITA Low Temperature Current Setting
 
@@ -721,6 +743,18 @@ pub enum BusStatus {
 pub enum BoostFreq {
     Freq500KHz,
     Freq1500KHz,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FastChargeThreshold {
+    Volt2V8,
+    Volt3V0,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RechargeThresholdOffset {
+    Offset100mV,
+    Offset200mV,
 }
 
 impl Display for BusStatus {
