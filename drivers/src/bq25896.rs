@@ -15,29 +15,35 @@ use libm::{log, round};
 /// - USB/adapter input detection
 /// - Temperature monitoring
 /// - Charge status reporting
+#[derive(Debug)]
 pub struct BQ25896<I2C> {
     dev: BQ25896Device<I2C>,
+    user_disable_charge: bool,
 }
 
-const POWERS_BQ25896_IN_CURRENT_STEP: u16 = 50;
-const POWERS_BQ25896_IN_CURRENT_MIN: u16 = 100;
-const POWERS_BQ25896_IN_CURRENT_MAX: u16 = 3250;
+const IN_CURRENT_STEP: u16 = 50;
+const IN_CURRENT_MIN: u16 = 100;
+const IN_CURRENT_MAX: u16 = 3250;
 
-const POWERS_BQ25896_IN_CURRENT_OFFSET_STEP: u16 = 100;
-const POWERS_BQ25896_IN_CURRENT_OFFSET_MAX: u16 = 3100;
+const IN_CURRENT_OFFSET_STEP: u16 = 100;
+const IN_CURRENT_OFFSET_MAX: u16 = 3100;
 
-const POWERS_BQ25896_FAST_CHG_CUR_STEP: u16 = 64;
-const POWERS_BQ25896_FAST_CHG_CURRENT_MAX: u16 = 3008;
+const FAST_CHG_CUR_STEP: u16 = 64;
+const FAST_CHG_CURRENT_MAX: u16 = 3008;
 
-const POWERS_BQ25896_CHG_VOL_BASE: u16 = 3840;
-const POWERS_BQ25896_CHG_VOL_STEP: u16 = 16;
-const POWERS_BQ25896_FAST_CHG_VOL_MIN: u16 = 3840;
-const POWERS_BQ25896_FAST_CHG_VOL_MAX: u16 = 4608;
+const CHG_VOL_BASE: u16 = 3840;
+const CHG_VOL_STEP: u16 = 16;
+const FAST_CHG_VOL_MIN: u16 = 3840;
+const FAST_CHG_VOL_MAX: u16 = 4608;
 
-const POWERS_BQ25896_PRE_CHG_CUR_BASE: u16 = 64;
-const POWERS_BQ25896_PRE_CHG_CUR_STEP: u16 = 64;
-const POWERS_BQ25896_PRE_CHG_CURRENT_MIN: u16 = 64;
-const POWERS_BQ25896_PRE_CHG_CURRENT_MAX: u16 = 1024;
+const PRE_CHG_CUR_BASE: u16 = 64;
+const PRE_CHG_CUR_STEP: u16 = 64;
+const PRE_CHG_CURRENT_MIN: u16 = 64;
+const PRE_CHG_CURRENT_MAX: u16 = 1024;
+
+const SYS_VOL_STEPS: u16 = 100;
+const SYS_VOFF_VOL_MIN: u16 = 3000;
+const SYS_VOFF_VOL_MAX: u16 = 3700;
 
 impl<I2C> BQ25896<I2C>
 where
@@ -51,6 +57,7 @@ where
     pub fn new(i2c: I2C, adr: u8) -> Result<Self, PmuSensorError> {
         let mut instance = Self {
             dev: BQ25896Device::new(i2c, adr),
+            user_disable_charge: false,
         };
         instance.detect_pmu(adr)?;
         Ok(instance)
@@ -95,12 +102,12 @@ where
 
     pub fn set_input_current_limit(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate input is multiple of step size
-        if milliampere % POWERS_BQ25896_IN_CURRENT_STEP != 0 {
-            return Err(PmuSensorError::CurrentStepInvalid100);
+        if milliampere % IN_CURRENT_STEP != 0 {
+            return Err(PmuSensorError::CurrentStepInvalid50);
         }
 
         // Clamp value to valid range
-        let ma = milliampere.clamp(POWERS_BQ25896_IN_CURRENT_MIN, POWERS_BQ25896_IN_CURRENT_MAX);
+        let ma = milliampere.clamp(IN_CURRENT_MIN, IN_CURRENT_MAX);
 
         // Read current register value
         let mut reg_val = self.dev.read_register(0x00)?;
@@ -109,8 +116,7 @@ where
         reg_val &= 0xC0;
 
         // Calculate new value (offset from minimum, divided by step size)
-        let current_bits =
-            ((ma - POWERS_BQ25896_IN_CURRENT_MIN) / POWERS_BQ25896_IN_CURRENT_MAX) as u8;
+        let current_bits = ((ma - IN_CURRENT_MIN) / IN_CURRENT_MAX) as u8;
 
         // Combine preserved bits with new value
         reg_val |= current_bits;
@@ -122,8 +128,7 @@ where
     pub fn get_input_current_limit(&mut self) -> Result<u16, PmuSensorError> {
         let reg_val = self.dev.read_register(0x00)?;
         let current_bits = reg_val & 0x3F;
-        let ma =
-            (current_bits as u16 * POWERS_BQ25896_IN_CURRENT_STEP) + POWERS_BQ25896_IN_CURRENT_MIN;
+        let ma = (current_bits as u16 * IN_CURRENT_STEP) + IN_CURRENT_MIN;
         Ok(ma)
     }
 
@@ -163,15 +168,15 @@ where
         mut millivolt: u16,
     ) -> Result<(), PmuSensorError> {
         // Validate step size
-        if millivolt % POWERS_BQ25896_IN_CURRENT_OFFSET_STEP != 0 {
+        if millivolt % IN_CURRENT_OFFSET_STEP != 0 {
             return Err(PmuSensorError::CurrentStepInvalid100);
         }
 
-        if millivolt > POWERS_BQ25896_IN_CURRENT_OFFSET_MAX {
-            millivolt = POWERS_BQ25896_IN_CURRENT_OFFSET_MAX;
+        if millivolt > IN_CURRENT_OFFSET_MAX {
+            millivolt = IN_CURRENT_OFFSET_MAX;
         }
 
-        let steps = millivolt / POWERS_BQ25896_IN_CURRENT_OFFSET_STEP;
+        let steps = millivolt / IN_CURRENT_OFFSET_STEP;
         let val = self.dev.read_register(0x01)?;
         let data = (val & 0xE0) | (steps as u8);
         self.dev.write_register(&[0x01, data])
@@ -189,17 +194,120 @@ where
         self.dev.write_register(&[0x02, data])
     }
 
+    // Disables ADC conversion
+    pub fn set_adc_disabled(&mut self) -> Result<(), PmuSensorError> {
+        let mut data = self.dev.read_register(0x02)?;
+        data &= !(1 << 7); // Clear ADC conversion bit
+        self.dev.write_register(&[0x02, data])
+    }
+
+    // Set boost frequency
+    pub fn set_boost_freq(&mut self, freq: BoostFreq) -> Result<(), PmuSensorError> {
+        match freq {
+            BoostFreq::Freq500KHz => self.dev.set_register_bit(0x02, 5),
+            BoostFreq::Freq1500KHz => self.dev.clear_register_bit(0x02, 5),
+        }
+    }
+
+    // Get boost frequency
+    pub fn get_boost_freq(&mut self) -> Result<BoostFreq, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x02, 5)?;
+        Ok(if bit != 0 {
+            BoostFreq::Freq500KHz
+        } else {
+            BoostFreq::Freq1500KHz
+        })
+    }
+
+    // Input Current Optimizer controls
+    pub fn enable_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x02, 4)
+    }
+
+    pub fn disable_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x02, 4)
+    }
+
+    // Input Detection controls
+    pub fn enable_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x02, 1)
+    }
+
+    pub fn disable_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x02, 1)
+    }
+
+    pub fn is_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x02, 1)?;
+        Ok(bit != 0)
+    }
+
+    // Automatic Input Detection controls
+    pub fn enable_automatic_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x02, 0)
+    }
+
+    pub fn disable_automatic_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x02, 0)
+    }
+
+    pub fn is_automatic_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x02, 0)?;
+        Ok(bit != 0)
+    }
+
     // REGISTER 0x03
     // Battery Load (IBATLOAD) Enable, I2C Watchdog Timer Reset, Boost (OTG) Mode Configuration
     // Charge Enable Configuration,  Minimum System Voltage Limit, Minimum Battery Voltage (falling) to exit boost mode
 
+    pub fn is_bat_load_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x03, 7)?;
+        Ok(bit != 0)
+    }
+
+    pub fn disable_bat_load(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x03, 7)
+    }
+
+    pub fn enable_bat_load(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x03, 7)
+    }
+
+    pub fn feed_watchdog(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x03, 6)
+    }
+
+    pub fn is_otg_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x03, 5)?;
+        Ok(bit != 0)
+    }
+
+    pub fn disable_otg(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x03, 5)?;
+        // Re-enable charging if it wasn't explicitly disabled by user
+        if !self.user_disable_charge {
+            self.dev.set_register_bit(0x03, 4)?;
+        }
+        Ok(())
+    }
+
+    pub fn enable_otg(&mut self) -> Result<bool, PmuSensorError> {
+        if self.is_vbus_in()? {
+            return Ok(false);
+        }
+        self.dev.set_register_bit(0x03, 5)?;
+        Ok(true)
+    }
+
     /// Enables charging
     pub fn set_charge_enabled(&mut self) -> Result<(), PmuSensorError> {
+        self.user_disable_charge = false;
         self.dev.set_register_bit(0x03, 4)
     }
 
     /// Disables charging
     pub fn set_charge_disabled(&mut self) -> Result<(), PmuSensorError> {
+        self.user_disable_charge = true;
         self.dev.clear_register_bit(0x03, 4)
     }
 
@@ -207,6 +315,37 @@ where
     pub fn is_charge_enabled(&mut self) -> Result<bool, PmuSensorError> {
         let bit = self.dev.get_register_bit(0x03, 4)?;
         Ok(bit != 0)
+    }
+
+    pub fn set_sys_power_down_voltage(&mut self, millivolt: u16) -> Result<(), PmuSensorError> {
+        if millivolt % SYS_VOL_STEPS != 0 {
+            return Err(PmuSensorError::VoltageStepInvalid100);
+        }
+        if !(SYS_VOFF_VOL_MIN..=SYS_VOFF_VOL_MAX).contains(&millivolt) {
+            return Err(PmuSensorError::PowerDownVoltageInvalid);
+        }
+
+        let mut val = self.dev.read_register(0x03)?;
+        val &= 0xF1;
+        val |= ((millivolt - SYS_VOFF_VOL_MIN) / SYS_VOL_STEPS) as u8;
+        val <<= 1;
+        self.dev.write_register(&[0x03, val])
+    }
+
+    pub fn get_sys_power_down_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x03)?;
+        let val = (val & 0x0E) >> 1;
+        Ok((val as u16 * SYS_VOL_STEPS) + SYS_VOFF_VOL_MIN)
+    }
+
+    pub fn set_exit_boost_mode_voltage(
+        &mut self,
+        voltage: ExitBoostModeVolt,
+    ) -> Result<(), PmuSensorError> {
+        match voltage {
+            ExitBoostModeVolt::MiniVolt2V9 => self.dev.clear_register_bit(0x03, 0),
+            ExitBoostModeVolt::MiniVolt2V5 => self.dev.set_register_bit(0x03, 0),
+        }
     }
 
     // REGISTER 0x04
@@ -226,12 +365,12 @@ where
         milliampere: u16,
     ) -> Result<(), PmuSensorError> {
         // Check if current is multiple of step size
-        if milliampere % POWERS_BQ25896_FAST_CHG_CUR_STEP != 0 {
+        if milliampere % FAST_CHG_CUR_STEP != 0 {
             return Err(PmuSensorError::CurrentStepInvalid64);
         }
 
         // Clamp to max value
-        let current = milliampere.min(POWERS_BQ25896_FAST_CHG_CURRENT_MAX);
+        let current = milliampere.min(FAST_CHG_CURRENT_MAX);
 
         // Read current register value
         let mut val = self.dev.read_register(0x04)?;
@@ -240,7 +379,7 @@ where
         val &= 0x80;
 
         // Calculate and set new current bits
-        val |= (current / POWERS_BQ25896_FAST_CHG_CUR_STEP) as u8;
+        val |= (current / FAST_CHG_CUR_STEP) as u8;
 
         // Write back to register
         self.dev.write_register(&[0x04, val])
@@ -251,7 +390,7 @@ where
         let val = self.dev.read_register(0x04)?;
         let bits = val & 0x7F; // Extract bits 6:0
 
-        Ok(bits as u16 * POWERS_BQ25896_FAST_CHG_CUR_STEP)
+        Ok(bits as u16 * FAST_CHG_CUR_STEP)
     }
 
     // REGISTER 0x05
@@ -260,15 +399,12 @@ where
     /// Sets the precharge current
     pub fn set_precharge_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate step size
-        if milliampere % POWERS_BQ25896_PRE_CHG_CUR_STEP != 0 {
+        if milliampere % PRE_CHG_CUR_STEP != 0 {
             return Err(PmuSensorError::CurrentStepInvalid64);
         }
 
         // Clamp to valid range
-        let current = milliampere.clamp(
-            POWERS_BQ25896_PRE_CHG_CURRENT_MIN,
-            POWERS_BQ25896_PRE_CHG_CURRENT_MAX,
-        );
+        let current = milliampere.clamp(PRE_CHG_CURRENT_MIN, PRE_CHG_CURRENT_MAX);
 
         // Read current register value
         let mut val = self.dev.read_register(0x05)?;
@@ -277,8 +413,7 @@ where
         val &= 0x0F;
 
         // Calculate new current bits and shift to position
-        let current_bits =
-            ((current - POWERS_BQ25896_PRE_CHG_CUR_BASE) / POWERS_BQ25896_PRE_CHG_CUR_STEP) as u8;
+        let current_bits = ((current - PRE_CHG_CUR_BASE) / PRE_CHG_CUR_STEP) as u8;
         val |= current_bits << 4;
 
         // Write back to register
@@ -290,7 +425,7 @@ where
         let val = self.dev.read_register(0x05)?;
         let bits = (val & 0xF0) >> 4;
 
-        Ok(POWERS_BQ25896_PRE_CHG_CUR_STEP + (bits as u16 * POWERS_BQ25896_PRE_CHG_CUR_STEP))
+        Ok(PRE_CHG_CUR_STEP + (bits as u16 * PRE_CHG_CUR_STEP))
     }
 
     // REGISTER 0x06
@@ -299,15 +434,12 @@ where
     /// Sets the charge target voltage
     pub fn set_charge_target_voltage(&mut self, target_voltage: u16) -> Result<(), PmuSensorError> {
         // Check if voltage is multiple of step size
-        if target_voltage % POWERS_BQ25896_CHG_VOL_STEP != 0 {
+        if target_voltage % CHG_VOL_STEP != 0 {
             return Err(PmuSensorError::VoltageStepInvalid16);
         }
 
         // Clamp voltage to valid range
-        let voltage = target_voltage.clamp(
-            POWERS_BQ25896_FAST_CHG_VOL_MIN,
-            POWERS_BQ25896_FAST_CHG_VOL_MAX,
-        );
+        let voltage = target_voltage.clamp(FAST_CHG_VOL_MIN, FAST_CHG_VOL_MAX);
 
         // Read current register value
         let mut val = self.dev.read_register(0x06)?;
@@ -316,7 +448,7 @@ where
         val &= 0x03;
 
         // Calculate and set new voltage bits
-        val |= (((voltage - POWERS_BQ25896_CHG_VOL_BASE) / POWERS_BQ25896_CHG_VOL_STEP) << 2) as u8;
+        val |= (((voltage - CHG_VOL_BASE) / CHG_VOL_STEP) << 2) as u8;
 
         // Write back to register
         self.dev.write_register(&[0x06, val])
@@ -328,10 +460,10 @@ where
         let bits = (val & 0xFC) >> 2;
 
         if bits > 0x30 {
-            return Ok(POWERS_BQ25896_FAST_CHG_VOL_MAX);
+            return Ok(FAST_CHG_VOL_MAX);
         }
 
-        Ok(POWERS_BQ25896_CHG_VOL_BASE + (bits as u16 * POWERS_BQ25896_CHG_VOL_STEP))
+        Ok(CHG_VOL_BASE + (bits as u16 * CHG_VOL_STEP))
     }
 
     // REGISTER 0x07
@@ -521,16 +653,18 @@ pub enum PmuSensorError {
     ReadRegister,
     /// Failed to write to register
     WriteRegister,
-    /// Fast charge current limit exceeded
-    CurrentChargeLimitExceeded,
-    // Invalid charge step limit (must be multiple of 64)
-    CurrentChargeStepLimitInvalid,
     // Voltage step invalid (must be multiple of 16)
     VoltageStepInvalid16,
+    // Voltage step invalid (must be multiple of 100)
+    VoltageStepInvalid100,
     // Current step invalid (must be multiple of 64)
     CurrentStepInvalid64,
     // Current step invalid (must be multiple of 100)
     CurrentStepInvalid100,
+    // Current step invalid (must be multiple of 50)
+    CurrentStepInvalid50,
+    // Needs to be inbetween  3000 and 3700mV
+    PowerDownVoltageInvalid,
 }
 
 /// Status of the power input source
@@ -546,6 +680,12 @@ pub enum BusStatus {
     Otg,
     /// Unknown input status
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BoostFreq {
+    Freq500KHz,
+    Freq1500KHz,
 }
 
 impl Display for BusStatus {
@@ -620,6 +760,13 @@ pub enum BoostColdThreshold {
     VBCOLD1 = 0x01, // (Typ. 80%)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ExitBoostModeVolt {
+    MiniVolt2V9,
+    MiniVolt2V5,
+}
+
+#[derive(Debug)]
 struct BQ25896Device<I2C> {
     i2c: I2C,
     adr: u8,
