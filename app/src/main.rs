@@ -5,14 +5,13 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
-use core::cell::RefCell;
 use core::time::Duration;
-use critical_section::Mutex;
 use defmt::{error, info};
 use draw_buffer::DrawBuffer;
 use embedded_hal::i2c::I2c as I2CBus;
-use embedded_hal_bus::i2c::CriticalSectionDevice;
+use embedded_hal_bus::i2c::AtomicDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_hal_bus::util::AtomicCell;
 use esp_alloc::psram_allocator;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
@@ -20,14 +19,16 @@ use esp_hal::delay::Delay;
 use esp_hal::dma::{DmaRxBuf, DmaTxBuf};
 use esp_hal::gpio::{Input, Level, Output, Pull};
 use esp_hal::i2c::master::I2c;
+use esp_hal::rtc_cntl::Rtc;
 use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
 use esp_hal::time::now;
 use esp_hal::time::RateExtU32;
+use esp_hal::timer::timg::TimerGroup;
 use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, main};
 use mipidsi::interface::SpiInterface;
-use s3_display_amoled_touch_drivers::bq25896::ChargeStatus;
+use s3_display_amoled_touch_drivers::bq25896::{ChargeStatus, PmuSensorError};
 use s3_display_amoled_touch_drivers::{bq25896::BQ25896, cst816s::CST816S};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel};
 use slint::platform::{Platform, PointerEventButton};
@@ -48,6 +49,13 @@ pub const DISPLAY_WIDTH: u16 = 536;
 /// I2C address of BQ25896 PMU
 const BQ25896_SLAVE_ADDRESS: u8 = 0x6B;
 
+/// Charging target voltage in mV for BQ25896
+const PMU_CHARGE_TARGET_VOLTAGE: u16 = 4208;
+/// Precharge current in mA for BQ25896
+const PMU_PRECHARGE_CURRENT: u16 = 128;
+/// Constant charging current in mA for BQ25896
+const PMU_CONSTANT_CHARGE_CURRENT: u16 = 2048;
+
 // credits to
 // https://github.com/slint-ui/slint/blob/master/examples/mcu-board-support/esp32_s3_box.rs and
 // https://github.com/Yandrik/kolibri-cyd-evaluation-apps/blob/b089aef31cc64e294bd64b2032356fb70789ad65/app/src/bin/exapp-slint-timer.rs#L56
@@ -67,6 +75,14 @@ fn main() -> ! {
         config
     });
 
+    let mut rtc = Rtc::new(peripherals.LPWR);
+    rtc.rwdt.disable();
+
+    let mut timer_group0 = TimerGroup::new(peripherals.TIMG0);
+    timer_group0.wdt.disable();
+    let mut timer_group1 = TimerGroup::new(peripherals.TIMG1);
+    timer_group1.wdt.disable();
+
     // Initialize PSRAM allocator
     psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
@@ -76,51 +92,10 @@ fn main() -> ! {
         .with_sda(peripherals.GPIO3)
         .with_scl(peripherals.GPIO2);
 
-    let i2c_ref_cell =
-        singleton!(:Mutex<RefCell<I2c<'_, esp_hal::Blocking>>> = Mutex::new(RefCell::new(i2c)))
-            .expect("Failed to create I2C mutex");
+    let i2c_ref_cell = singleton!(:AtomicCell<I2c<'_, esp_hal::Blocking>> = AtomicCell::new(i2c))
+        .expect("Failed to create I2C mutex");
 
-    // Initialize BQ25896 charger
-    let mut pmu = BQ25896::new(
-        CriticalSectionDevice::new(i2c_ref_cell),
-        BQ25896_SLAVE_ADDRESS,
-    )
-    .expect("BQ25896 init failed");
-
-    // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
-    pmu.set_charge_target_voltage(4208)
-        .expect("set_charge_target_voltage failed");
-
-    let charge_target_voltage = pmu
-        .get_charge_target_voltage()
-        .expect("get_charge_target_voltage failed");
-    info!("Charge target voltage: {}", charge_target_voltage);
-
-    // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
-    pmu.set_precharge_current(128)
-        .expect("set_precharge_current_limit failed");
-
-    let precharge_current = pmu
-        .get_precharge_current()
-        .expect("get_precharge_current failed");
-
-    info!("Precharge current: {}", precharge_current);
-
-    // The premise is that Limit Pin is disabled, or it will only follow the maximum charging current set by Limit Pin.
-    // Set the charging current , Range:0~5056mA ,step:64mA
-    pmu.set_charger_constantcurr(1536)
-        .expect("set_charger_constantcurr failed");
-
-    let constantcurr = pmu
-        .get_charger_constantcurr()
-        .expect("get_charger_constantcurr failed");
-
-    info!("Charger constant current: {}", constantcurr);
-
-    pmu.set_adc_enabled().expect("set_adc_enabled failed");
-
-    pmu.set_fast_charge_current_limit(1024)
-        .expect("set_fast_charge_current_limit failed");
+    let mut pmu = init_pmu(i2c_ref_cell).expect("PMU initialization failed");
 
     let fast_charge_current_limit = pmu
         .get_fast_charge_current_limit()
@@ -128,15 +103,27 @@ fn main() -> ! {
 
     info!("Fast charge current limit: {}", fast_charge_current_limit);
 
+    let precharge_current = pmu
+        .get_precharge_current()
+        .expect("get_precharge_current failed");
+
+    info!("Precharge current: {}", precharge_current);
+
+    let charge_target_voltage = pmu
+        .get_charge_target_voltage()
+        .expect("get_charge_target_voltage failed");
+
+    info!("Charge target voltage: {}", charge_target_voltage);
+
     info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
 
     // Initialize touchpad
     let touch_int = peripherals.GPIO21;
     let touch_int = Input::new(touch_int, Pull::None);
-    let mut touchpad = CST816S::new(CriticalSectionDevice::new(i2c_ref_cell), touch_int, delay);
+    let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int, delay);
 
     // Detect SPI model
-    detect_spi_model(CriticalSectionDevice::new(i2c_ref_cell));
+    detect_spi_model(AtomicDevice::new(i2c_ref_cell));
 
     // Initialize PMICEN pin
     let mut pmicen = Output::new(peripherals.GPIO38, Level::Low);
@@ -194,24 +181,41 @@ fn main() -> ! {
 
     // Initialize UI
     let ui = AppWindow::new().expect("UI init failed");
+
     // Set up UI update callback
     ui.on_request_update({
         let ui_handle = ui.as_weak();
+        let mut pmu = init_pmu(i2c_ref_cell).expect("PMU initialization failed");
+
         move || {
             info!("update pmu readings");
+            let ui = ui_handle.unwrap();
+            let text = pmu.get_info().expect("get_info failed");
+            ui.set_text(text.clone().into());
+        }
+    });
+
+    // Set up charger callback
+    ui.on_toggle_charger({
+        let ui_handle = ui.as_weak();
+        let mut pmu = init_pmu(i2c_ref_cell).expect("PMU initialization failed");
+
+        move || {
+            info!("update charger state");
 
             let not_charging = pmu.get_charge_status().expect("get_charge_status failed")
                 == ChargeStatus::NoCharge;
             if not_charging {
-                pmu.set_charge_enable().expect("set_charge_enable failed");
+                pmu.set_charge_enabled().expect("set_charge_enable failed");
             } else {
                 pmu.set_charge_disabled()
                     .expect("set_charge_disabled failed");
             }
 
+            let status = pmu.is_charge_enabled().expect("is_charge_enabled failed");
+
             let ui = ui_handle.unwrap();
-            let text = pmu.get_info().expect("get_info failed");
-            ui.set_text(text.clone().into());
+            ui.set_charging(!status);
         }
     });
 
@@ -274,6 +278,30 @@ where
     } else {
         error!("Unable to detect 1.91-inch touch board model!");
     }
+}
+
+fn init_pmu<I2C>(
+    i2c_ref_cell: &'static AtomicCell<I2C>,
+) -> Result<BQ25896<AtomicDevice<'static, I2C>>, PmuSensorError>
+where
+    I2C: embedded_hal::i2c::I2c,
+{
+    // Initialize BQ25896 charger
+    let mut pmu = BQ25896::new(AtomicDevice::new(i2c_ref_cell), BQ25896_SLAVE_ADDRESS)?;
+
+    // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
+    pmu.set_charge_target_voltage(PMU_CHARGE_TARGET_VOLTAGE)?;
+
+    // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
+    pmu.set_precharge_current(PMU_PRECHARGE_CURRENT)?;
+
+    // The premise is that Limit Pin is disabled, or it will only follow the maximum charging current set by Limit Pin.
+    // Set the charging current , Range:0~5056mA ,step:64mA
+    pmu.set_fast_charge_current_limit(PMU_CONSTANT_CHARGE_CURRENT)?;
+
+    pmu.set_adc_enabled()?;
+
+    Ok(pmu)
 }
 
 struct Backend {

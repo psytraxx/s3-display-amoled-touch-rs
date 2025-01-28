@@ -1,13 +1,17 @@
 import { HorizontalBox, VerticalBox, Button, CheckBox } from "std-widgets.slint";
 export component AppWindow inherits Window {
     in-out property <string> text: "Please touch the button \nto update the PMU reading";
-    in-out property <image> status-icon: @image-url("../assets/battery.png");
+    in-out property <bool> charging: false;
+    in property <image> status-icon: @image-url("../assets/battery.png");
+
     width: 536px;
     height: 240px;
 
     default-font-size: 22px;
 
     callback request-update();
+    callback toggle-charger();
+
     HorizontalBox {
         preferred-width: 0cm;
 
@@ -32,6 +36,14 @@ export component AppWindow inherits Window {
                 height: 80px;
                 clicked => {
                     root.request-update();
+                }
+            }
+
+            CheckBox {
+                text: self.checked ? "Disable Charger" : "Enable Charger";
+                checked: root.charging;
+                toggled => {
+                    root.toggle-charger();
                 }
             }
         }
