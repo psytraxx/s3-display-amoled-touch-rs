@@ -56,6 +56,11 @@ const BAT_COMP_MAX: u16 = 140;
 const VCLAMP_STEPS: u16 = 32;
 const VCLAMP_MAX: u16 = 224;
 
+const BOOST_VOL_BASE: u16 = 4550;
+const BOOST_VOL_STEP: u16 = 64;
+const BOOST_VOL_MIN: u16 = 4550;
+const BOOST_VOL_MAX: u16 = 5510;
+
 impl<I2C> BQ25896<I2C>
 where
     I2C: I2c,
@@ -746,10 +751,44 @@ where
         }
     }
 
-    // REGISTER 0x0A  todo onwards
+    // REGISTER 0x0A
     // Boost Mode Voltage Regulation, PFM mode allowed in boost mode , Boost Mode Current Limit
 
-    // REGISTER 0x0B
+    /// Set boost mode voltage regulation (4550mV ~ 5510mV)
+    /// Returns error if voltage is not aligned to 64mV steps
+    pub fn set_boost_voltage(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
+        if millivolt % BOOST_VOL_STEP != 0 {
+            return Err(PmuSensorError::VoltageStepInvalid64);
+        }
+
+        millivolt = millivolt.clamp(BOOST_VOL_MIN, BOOST_VOL_MAX);
+        let val = self.dev.read_register(0x0A)?;
+        let steps = ((millivolt - BOOST_VOL_BASE) / BOOST_VOL_STEP) as u8;
+        let new_val = (val & 0xF0) | (steps << 4);
+        self.dev.write_register(&[0x0A, new_val])
+    }
+
+    /// Set boost mode current limit
+    pub fn set_boost_current_limit(
+        &mut self,
+        limit: BoostCurrentLimit,
+    ) -> Result<(), PmuSensorError> {
+        let val = self.dev.read_register(0x0A)?;
+        let new_val = (val & 0x03) | (limit as u8);
+        self.dev.write_register(&[0x0A, new_val])
+    }
+
+    /// Configure PFM mode in boost mode
+    /// * `enable` - If true, allow PFM in boost mode (default)
+    pub fn set_boost_mode_pfm(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+        if enable {
+            self.dev.clear_register_bit(0x0A, 3)
+        } else {
+            self.dev.set_register_bit(0x0A, 3)
+        }
+    }
+
+    // REGISTER 0x0B todo onwards
     // VBUS Status register, N/A Charging Status, Power Good Status , VSYS Regulation Status
 
     /// Gets the charge status
@@ -948,6 +987,8 @@ pub enum PmuSensorError {
     VoltageStepInvalid100,
     // Voltage step invalid (must be multiple of 32)
     VoltageStepInvalid32,
+    // Voltage step invalid (must be multiple of 64)
+    VoltageStepInvalid64,
     // Current step invalid (must be multiple of 64)
     CurrentStepInvalid64,
     // Current step invalid (must be multiple of 100)
@@ -1020,6 +1061,18 @@ pub enum ThermalRegThreshold {
     Celsius80 = 1,
     Celsius100 = 2,
     Celsius120 = 3,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum BoostCurrentLimit {
+    Limit500mA = 0x00,
+    Limit750mA = 0x01,
+    Limit1200mA = 0x02,
+    Limit1400mA = 0x03,
+    Limit1650mA = 0x04,
+    Limit1875mA = 0x05,
+    Limit2150mA = 0x06,
 }
 
 impl Display for BusStatus {
