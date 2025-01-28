@@ -809,19 +809,40 @@ where
         text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
         text.push_str(&format!("Bus state: {}\n", self.get_bus_status()?));
         text.push_str(&format!(
-            "Battery voltage: {}mv\n",
+            "Battery voltage: {}mV\n",
             self.get_battery_voltage()?
         ));
-        text.push_str(&format!("USB voltage: {}mv\n", self.get_vbus_voltage()?));
-        text.push_str(&format!("SYS voltage: {}mv\n", self.get_sys_voltage()?));
+        text.push_str(&format!("USB voltage: {}mV\n", self.get_vbus_voltage()?));
+        text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage()?));
         text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));
         text.push_str(&format!(
-            "Charger constant current: {}mA\n",
+            "Charger fast carge  current: {}mA\n",
             self.get_fast_charge_current_limit()?
         ));
         text.push_str(&format!(
-            "Charger target voltage: {}mv\n",
+            "Charger target voltage: {}mV\n",
             self.get_charge_target_voltage()?
+        ));
+        text.push_str(&format!("Boost frequency: {}\n", self.get_boost_freq()?));
+        text.push_str(&format!(
+            "Fast charge timer: {}\n",
+            self.get_fast_charge_timer()?
+        ));
+        text.push_str(&format!(
+            "Input current limit: {}mA\n",
+            self.get_input_current_limit()?
+        ));
+        text.push_str(&format!(
+            "Termination current: {}mA\n",
+            self.get_termination_current()?
+        ));
+        text.push_str(&format!(
+            "Power down voltage: {}mV\n",
+            self.get_sys_power_down_voltage()?
+        ));
+        text.push_str(&format!(
+            "Pre charge current: {}mA\n",
+            self.get_precharge_current()?
         ));
 
         Ok(text)
@@ -925,6 +946,26 @@ impl Display for BusStatus {
             BusStatus::Adapter => write!(f, "Adapter"),
             BusStatus::Otg => write!(f, "OTG"),
             BusStatus::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
+impl Display for FastChargeTimer {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            FastChargeTimer::Hours5 => write!(f, "5 hours"),
+            FastChargeTimer::Hours8 => write!(f, "8 hours"),
+            FastChargeTimer::Hours12 => write!(f, "12 hours"),
+            FastChargeTimer::Hours20 => write!(f, "20 hours"),
+        }
+    }
+}
+
+impl Display for BoostFreq {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            BoostFreq::Freq500KHz => write!(f, "500 kHz"),
+            BoostFreq::Freq1500KHz => write!(f, "1500 kHz"),
         }
     }
 }

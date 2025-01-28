@@ -13,10 +13,11 @@ export component AppWindow inherits Window {
     callback toggle-charger();
 
     HorizontalBox {
-        preferred-width: 0cm;
-
-        Text {
-            text: root.text;
+        Flickable {
+            viewport-height: 300px;
+            Text {
+                text: root.text;
+            }
         }
 
         VerticalBox {
