@@ -54,7 +54,7 @@ const PMU_CHARGE_TARGET_VOLTAGE: u16 = 4208;
 /// Precharge current in mA for BQ25896
 const PMU_PRECHARGE_CURRENT: u16 = 128;
 /// Constant charging current in mA for BQ25896
-const PMU_CONSTANT_CHARGE_CURRENT: u16 = 1024;
+const PMU_CONSTANT_CHARGE_CURRENT: u16 = 1536;
 
 // credits to
 // https://github.com/slint-ui/slint/blob/master/examples/mcu-board-support/esp32_s3_box.rs and
@@ -216,6 +216,8 @@ fn main() -> ! {
 
             let ui = ui_handle.unwrap();
             ui.set_charging(!status);
+            let text = pmu.get_info().expect("get_info failed");
+            ui.set_text(text.clone().into());
         }
     });
 

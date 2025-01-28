@@ -68,6 +68,10 @@ const VINDPM_VOL_STEPS: u16 = 100;
 const VINDPM_VOL_MIN: u16 = 3900;
 const VINDPM_VOL_MAX: u16 = 15300;
 
+const IN_CURRENT_OPT_STEP: u16 = 50;
+const IN_CURRENT_OPT_MIN: u16 = 100;
+const IN_CURRENT_OPT_MAX: u16 = 3250;
+
 impl<I2C> BQ25896<I2C>
 where
     I2C: I2c,
@@ -973,8 +977,50 @@ where
     // REGISTER 0x13
     // VINDPM Status, IINDPM Status, Input Current Limit in effect while Input Current Optimizer
 
+    /// Check if Dynamic Power Management is active
+    pub fn is_dynamic_power_management(&mut self) -> Result<bool, PmuSensorError> {
+        self.dev.get_register_bit(0x13, 7)
+    }
+
+    /// Check if Input Current Limit is active
+    pub fn is_input_current_limit(&mut self) -> Result<bool, PmuSensorError> {
+        self.dev.get_register_bit(0x13, 6)
+    }
+
+    /// Set Input Current Limit for optimizer (100-3250mA)
+    pub fn set_input_current_limit_optimizer(
+        &mut self,
+        mut milliampere: u16,
+    ) -> Result<(), PmuSensorError> {
+        if milliampere % IN_CURRENT_OPT_STEP != 0 {
+            return Err(PmuSensorError::CurrentStepInvalid50);
+        }
+
+        milliampere = milliampere.clamp(IN_CURRENT_OPT_MIN, IN_CURRENT_OPT_MAX);
+        let val = self.dev.read_register(0x13)?;
+        let steps = ((milliampere - IN_CURRENT_OPT_MIN) / IN_CURRENT_OPT_STEP) as u8;
+        let new_val = (val & 0x3F) | (steps << 6);
+        self.dev.write_register(&[0x13, new_val])
+    }
+
     // REGISTER 0x14
     // Register Reset, Input Current Optimizer (ICO) Status , Device Configuration, Temperature Profile, Device Revision: 10
+
+    /// Reset device to default configuration
+    pub fn reset_default(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x14, 7)
+    }
+
+    /// Check if Input Current Optimization is in progress
+    pub fn is_input_current_optimizer(&mut self) -> Result<bool, PmuSensorError> {
+        self.dev.get_register_bit(0x14, 6)
+    }
+
+    /// Get device configuration
+    pub fn get_device_config(&mut self) -> Result<u8, PmuSensorError> {
+        let val = self.dev.read_register(0x14)?;
+        Ok((val >> 3) & 0x03)
+    }
 
     /// Gets the chip ID
     pub fn get_chip_id(&mut self) -> Result<u8, PmuSensorError> {
@@ -1045,6 +1091,11 @@ where
             "Input det. enabled: {}\n",
             self.is_input_detection_enabled()?
         ));
+        text.push_str(&format!(
+            "Input curr. optimizer: {}\n",
+            self.is_input_current_optimizer()?
+        ));
+        text.push_str(&format!("Chip Id: {}\n", self.get_chip_id()?));
 
         Ok(text)
     }

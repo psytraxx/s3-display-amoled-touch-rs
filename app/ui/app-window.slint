@@ -1,7 +1,7 @@
 import { HorizontalBox, VerticalBox, Button, CheckBox } from "std-widgets.slint";
 export component AppWindow inherits Window {
     in-out property <string> text: "Please touch the button \nto update the PMU reading";
-    in-out property <bool> charging: false;
+    in-out property <bool> charging: true;
     in property <image> status-icon: @image-url("../assets/battery.png");
 
     width: 536px;
@@ -14,9 +14,10 @@ export component AppWindow inherits Window {
 
     HorizontalBox {
         Flickable {
-            viewport-height: 520px;
+            viewport-height: 600px;
             Text {
                 text: root.text;
+                wrap: TextWrap.word-wrap;
             }
         }
 
@@ -41,7 +42,7 @@ export component AppWindow inherits Window {
             }
 
             CheckBox {
-                text: self.checked ? "Disabled" : "Enabled";
+                text: self.checked ? "Enabled" : "Disabled";
                 checked: root.charging;
                 toggled => {
                     root.toggle-charger();
