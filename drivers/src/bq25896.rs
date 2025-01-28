@@ -28,6 +28,8 @@ const IN_CURRENT_MAX: u16 = 3250;
 const IN_CURRENT_OFFSET_STEP: u16 = 100;
 const IN_CURRENT_OFFSET_MAX: u16 = 3100;
 
+const CHG_STEP_VAL: u16 = 50;
+
 const FAST_CHG_CUR_STEP: u16 = 64;
 const FAST_CHG_CURRENT_MAX: u16 = 3008;
 
@@ -60,6 +62,11 @@ const BOOST_VOL_BASE: u16 = 4550;
 const BOOST_VOL_STEP: u16 = 64;
 const BOOST_VOL_MIN: u16 = 4550;
 const BOOST_VOL_MAX: u16 = 5510;
+
+const VINDPM_VOL_BASE: u16 = 4550;
+const VINDPM_VOL_STEPS: u16 = 100;
+const VINDPM_VOL_MIN: u16 = 3900;
+const VINDPM_VOL_MAX: u16 = 15300;
 
 impl<I2C> BQ25896<I2C>
 where
@@ -821,16 +828,44 @@ where
         Ok(result.into())
     }
 
-    // REGISTER 0x0C todo onwards
+    // REGISTER 0x0C TODO
     // Watchdog Fault Status, Boost Mode Fault Status, Charge Fault Status, Battery Fault Status, NTC Fault Status
-
-    // REGISTER 0x0E
 
     // REGISTER 0x0D
     // VINDPM Threshold Setting Method, bsolute VINDPM Threshold
 
+    /// Set VINDPM threshold setting method
+    /// * `relative` - true for relative (default), false for absolute
+    pub fn set_vindpm_threshold_method(&mut self, relative: bool) -> Result<(), PmuSensorError> {
+        if relative {
+            self.dev.clear_register_bit(0x0D, 7)
+        } else {
+            self.dev.set_register_bit(0x0D, 7)
+        }
+    }
+
+    /// Set absolute VINDPM threshold voltage
+    /// * `millivolt` - Voltage in mV (2600-15300mV in 100mV steps)
+    pub fn set_vindpm_threshold(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
+        if millivolt % VINDPM_VOL_STEPS != 0 {
+            return Err(PmuSensorError::VoltageStepInvalid100);
+        }
+
+        millivolt = millivolt.clamp(VINDPM_VOL_MIN, VINDPM_VOL_MAX);
+        let val = self.dev.read_register(0x0D)?;
+        let steps = ((millivolt - VINDPM_VOL_BASE) / VINDPM_VOL_STEPS) as u8;
+        let new_val = (val & 0x80) | steps;
+        self.dev.write_register(&[0x0D, new_val])
+    }
+
     // REGISTER 0x0E
     // ADC conversion of Battery Voltage (VBAT)
+
+    /// Check if thermal regulation is normal
+    /// Returns true for normal operation, false if in thermal regulation
+    pub fn is_thermal_regulation_normal(&mut self) -> Result<bool, PmuSensorError> {
+        self.dev.get_register_bit(0x0E, 7).map(|b| !b)
+    }
 
     /// Gets battery voltage in millivolts
     pub fn get_battery_voltage(&mut self) -> Result<u16, PmuSensorError> {
@@ -916,6 +951,25 @@ where
     // REGISTER 0x12
     // ADC conversion of Charge Current (IBAT) when VBAT > VBATSHORT
 
+    /// Gets charge current in mA when VBAT > VBATSHORT
+    /// Note: If charger is disconnected, register retains last value
+    pub fn get_charge_current(&mut self) -> Result<u16, PmuSensorError> {
+        // Return 0 if not charging
+        if self.get_charge_status()? == ChargeStatus::NoCharge {
+            return Ok(0);
+        }
+
+        // Read and validate register
+        let val = self.dev.read_register(0x12)?;
+        if val == 0 {
+            return Ok(0);
+        }
+
+        // Calculate current in mA
+        let current = ((val & 0x7F) as u16) * CHG_STEP_VAL;
+        Ok(current)
+    }
+
     // REGISTER 0x13
     // VINDPM Status, IINDPM Status, Input Current Limit in effect while Input Current Optimizer
 
@@ -949,7 +1003,7 @@ where
         text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage()?));
         text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));
         text.push_str(&format!(
-            "Charger fast carge  current: {}mA\n",
+            "Charger fast charge curr.: {}mA\n",
             self.get_fast_charge_current_limit()?
         ));
         text.push_str(&format!(
@@ -962,11 +1016,11 @@ where
             self.get_fast_charge_timer()?
         ));
         text.push_str(&format!(
-            "Input current limit: {}mA\n",
+            "Input curr. limit: {}mA\n",
             self.get_input_current_limit()?
         ));
         text.push_str(&format!(
-            "Termination current: {}mA\n",
+            "Termination curr.: {}mA\n",
             self.get_termination_current()?
         ));
         text.push_str(&format!(
@@ -974,10 +1028,10 @@ where
             self.get_sys_power_down_voltage()?
         ));
         text.push_str(&format!(
-            "Pre charge current: {}mA\n",
+            "Pre charge curr.: {}mA\n",
             self.get_precharge_current()?
         ));
-
+        text.push_str(&format!("Charge curr.: {}mA\n", self.get_charge_current()?));
         text.push_str(&format!("HIZ mode: {}\n", self.is_hiz_mode()?));
         text.push_str(&format!(
             "Automatic input detection: {}\n",
@@ -988,7 +1042,7 @@ where
             self.is_charging_safety_timer_enabled()?
         ));
         text.push_str(&format!(
-            "Charging safety timer: {}\n",
+            "Input det. enabled: {}\n",
             self.is_input_detection_enabled()?
         ));
 
