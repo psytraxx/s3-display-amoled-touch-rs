@@ -463,7 +463,7 @@ where
         Ok(TERM_CHG_CUR_STEP + (bits as u16 * TERM_CHG_CUR_STEP))
     }
 
-    // REGISTER 0x06 - todo
+    // REGISTER 0x06
     // Charge Voltage Limit, Battery Precharge to Fast Charge Threshold, Battery Recharge Threshold Offset
 
     /// Sets the charge target voltage
@@ -523,11 +523,95 @@ where
         }
     }
 
-    // REGISTER 0x07 todo onwards
+    // REGISTER 0x07
     // Charging Termination Enable, STAT Pin Disable , I2C Watchdog Timer Setting, Charging Safety Timer Enable
     // Fast Charge Timer Setting, JEITA Low Temperature Current Setting
 
-    // REGISTER 0x08
+    pub fn enable_charging_termination(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x07, 7)
+    }
+
+    pub fn disable_charging_termination(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x07, 7)
+    }
+
+    pub fn is_charging_termination_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x07, 7)?;
+        Ok(bit != 0)
+    }
+
+    pub fn disable_stat_pin(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x07, 6)
+    }
+
+    pub fn enable_stat_pin(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x07, 6)
+    }
+
+    pub fn is_stat_pin_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x07, 6)?;
+        Ok(bit == 0)
+    }
+
+    pub fn disable_watchdog(&mut self) -> Result<(), PmuSensorError> {
+        let mut val = self.dev.read_register(0x07)?;
+        val &= 0xCF;
+        self.dev.write_register(&[0x07, val])
+    }
+
+    pub fn enable_watchdog(&mut self, config: WatchdogConfig) -> Result<(), PmuSensorError> {
+        let mut val = self.dev.read_register(0x07)?;
+        val &= 0xCF;
+        let bits = match config {
+            WatchdogConfig::TimerOut40Sec => 0x10,
+            WatchdogConfig::TimerOut80Sec => 0x20,
+            WatchdogConfig::TimerOut160Sec => 0x30,
+        };
+        self.dev.write_register(&[0x07, val | bits])
+    }
+
+    pub fn disable_charging_safety_timer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x07, 3)
+    }
+
+    pub fn enable_charging_safety_timer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x07, 3)
+    }
+
+    pub fn is_charging_safety_timer_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x07, 3)?;
+        Ok(bit != 0)
+    }
+
+    pub fn set_fast_charge_timer(&mut self, timer: FastChargeTimer) -> Result<(), PmuSensorError> {
+        let mut val = self.dev.read_register(0x07)?;
+        val &= 0xF1;
+        val |= (timer as u8) << 1;
+        self.dev.write_register(&[0x07, val])
+    }
+
+    pub fn get_fast_charge_timer(&mut self) -> Result<FastChargeTimer, PmuSensorError> {
+        let val = self.dev.read_register(0x07)?;
+        let timer_val = (val & 0x0E) >> 1;
+        Ok(match timer_val {
+            0 => FastChargeTimer::Hours5,
+            1 => FastChargeTimer::Hours8,
+            2 => FastChargeTimer::Hours12,
+            _ => FastChargeTimer::Hours20,
+        })
+    }
+
+    pub fn set_jeita_low_temperature_current(
+        &mut self,
+        current: JeitaLowTemperatureCurrent,
+    ) -> Result<(), PmuSensorError> {
+        match current {
+            JeitaLowTemperatureCurrent::Temp50 => self.dev.clear_register_bit(0x07, 0),
+            JeitaLowTemperatureCurrent::Temp20 => self.dev.set_register_bit(0x07, 0),
+        }
+    }
+
+    // REGISTER 0x08 todo onwards
     // IR Compensation Resistor Setting, IR Compensation Voltage Clamp, Thermal Regulation Threshold
 
     // REGISTER 0x09
@@ -755,6 +839,27 @@ pub enum FastChargeThreshold {
 pub enum RechargeThresholdOffset {
     Offset100mV,
     Offset200mV,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum WatchdogConfig {
+    TimerOut40Sec,
+    TimerOut80Sec,
+    TimerOut160Sec,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FastChargeTimer {
+    Hours5 = 0,
+    Hours8 = 1,
+    Hours12 = 2,
+    Hours20 = 3,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum JeitaLowTemperatureCurrent {
+    Temp50,
+    Temp20,
 }
 
 impl Display for BusStatus {
