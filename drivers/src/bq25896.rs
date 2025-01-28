@@ -657,12 +657,96 @@ where
         self.dev.write_register(&[0x08, val])
     }
 
-    // REGISTER 0x09  todo onwards
+    // REGISTER 0x09
     // Force Start Input Current Optimizer (ICO), Safety Timer Setting during DPM or Thermal Regulation,Force BATFET off to enable ship mode
     // JEITA High Temperature Voltage Setting, BATFET turn off delay control, BATFET full system reset enable, Current pulse control voltage up enable
     // Current pulse control voltage down enable
 
-    // REGISTER 0x0A
+    /// Force start Input Current Optimizer (ICO)
+    /// Note: This bit can only be set and always returns to 0 after ICO starts
+    pub fn force_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x09, 7)
+    }
+
+    /// Configure safety timer behavior during DPM or thermal regulation
+    /// * `slow_down` - If true, safety timer is slowed by 2X during input DPM/thermal regulation (default)
+    pub fn set_safety_timer_thermal_regulation(
+        &mut self,
+        slow_down: bool,
+    ) -> Result<(), PmuSensorError> {
+        if slow_down {
+            self.dev.set_register_bit(0x09, 6)
+        } else {
+            self.dev.clear_register_bit(0x09, 6)
+        }
+    }
+
+    /// Disables the battery power path (shutdown)
+    /// Note: Only works when on battery power, not when USB is connected
+    pub fn shutdown(&mut self) -> Result<(), PmuSensorError> {
+        self.disable_battery_power_path()
+    }
+
+    /// Disable battery power path
+    pub fn disable_battery_power_path(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x09, 5)
+    }
+
+    /// Enable battery power path
+    pub fn enable_battery_power_path(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x09, 5)
+    }
+
+    /// Configure JEITA high temperature voltage setting
+    /// * `use_vreg` - If true, use VREG instead of VREG-200mV during JEITA high temperature
+    pub fn set_jeita_high_temp_voltage(&mut self, use_vreg: bool) -> Result<(), PmuSensorError> {
+        if use_vreg {
+            self.dev.set_register_bit(0x09, 4)
+        } else {
+            self.dev.clear_register_bit(0x09, 4)
+        }
+    }
+
+    /// Configure BATFET turn off delay
+    /// * `delay` - If true, BATFET turns off with tSM_DLY delay when BATFET_DIS is set
+    pub fn set_batfet_turnoff_delay(&mut self, delay: bool) -> Result<(), PmuSensorError> {
+        if delay {
+            self.dev.set_register_bit(0x09, 3)
+        } else {
+            self.dev.clear_register_bit(0x09, 3)
+        }
+    }
+
+    /// Enable/disable BATFET full system reset
+    pub fn set_full_system_reset(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+        if enable {
+            self.dev.set_register_bit(0x09, 2)
+        } else {
+            self.dev.clear_register_bit(0x09, 2)
+        }
+    }
+
+    /// Enable/disable current pulse control voltage up
+    /// Note: Can only be set when EN_PUMPX is set
+    pub fn set_current_pulse_voltage_up(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+        if enable {
+            self.dev.set_register_bit(0x09, 1)
+        } else {
+            self.dev.clear_register_bit(0x09, 1)
+        }
+    }
+
+    /// Enable/disable current pulse control voltage down
+    /// Note: Can only be set when EN_PUMPX is set
+    pub fn set_current_pulse_voltage_down(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+        if enable {
+            self.dev.set_register_bit(0x09, 0)
+        } else {
+            self.dev.clear_register_bit(0x09, 0)
+        }
+    }
+
+    // REGISTER 0x0A  todo onwards
     // Boost Mode Voltage Regulation, PFM mode allowed in boost mode , Boost Mode Current Limit
 
     // REGISTER 0x0B
