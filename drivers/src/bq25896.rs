@@ -835,6 +835,69 @@ where
     // REGISTER 0x0C TODO
     // Watchdog Fault Status, Boost Mode Fault Status, Charge Fault Status, Battery Fault Status, NTC Fault Status
 
+    /// Check watchdog fault status
+    pub fn is_watchdog_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
+        Ok(((val >> 7) & 0x01) != 0)
+    }
+
+    /// Check boost mode fault status
+    pub fn is_boost_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
+        Ok(((val >> 6) & 0x01) != 0)
+    }
+
+    /// Get charge fault status
+    pub fn get_charge_fault(&mut self) -> Result<ChargeFaultStatus, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
+        let fault = (val >> 4) & 0x03;
+        Ok(match fault {
+            0 => ChargeFaultStatus::Normal,
+            1 => ChargeFaultStatus::InputFault,
+            2 => ChargeFaultStatus::ThermalShutdown,
+            3 => ChargeFaultStatus::SafetyTimer,
+            _ => ChargeFaultStatus::Normal,
+        })
+    }
+
+    /// Check battery fault status
+    pub fn is_battery_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
+        Ok(((val >> 3) & 0x01) != 0)
+    }
+
+    /// Check NTC fault status
+    pub fn is_ntc_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
+        Ok((val & 0x07) != 0)
+    }
+
+    /// Get NTC status as human readable string
+    pub fn get_ntc_status_string(&mut self) -> Result<&'static str, PmuSensorError> {
+        let status = self.dev.read_register(0x0C)? & 0x07;
+
+        if self.is_otg()? {
+            // Boost mode
+            match status {
+                x if x == NtcBoostStatus::Normal as u8 => Ok("Boost mode NTC normal"),
+                x if x == NtcBoostStatus::Cold as u8 => Ok("Boost mode NTC cold"),
+                x if x == NtcBoostStatus::Hot as u8 => Ok("Boost mode NTC hot"),
+                _ => Ok("Unknown"),
+            }
+        } else {
+            // Buck mode
+            match status {
+                x if x == NtcBuckStatus::Normal as u8 => Ok("Buck mode NTC normal"),
+                x if x == NtcBuckStatus::Warm as u8 => Ok("Buck mode NTC warm"),
+                x if x == NtcBuckStatus::Cold as u8 || x == NtcBuckStatus::ColdAlt as u8 => {
+                    Ok("Buck mode NTC cold")
+                }
+                x if x == NtcBuckStatus::Hot as u8 => Ok("Buck mode NTC hot"),
+                _ => Ok("Unknown"),
+            }
+        }
+    }
+
     // REGISTER 0x0D
     // VINDPM Threshold Setting Method, bsolute VINDPM Threshold
 
@@ -1202,6 +1265,30 @@ pub enum BoostCurrentLimit {
     Limit1650mA = 0x04,
     Limit1875mA = 0x05,
     Limit2150mA = 0x06,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum NtcBoostStatus {
+    Normal = 0,
+    Cold = 1,
+    Hot = 2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum NtcBuckStatus {
+    Normal = 0,
+    Warm = 2,
+    Cold = 3,
+    ColdAlt = 5,
+    Hot = 6,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ChargeFaultStatus {
+    Normal = 0x00,
+    InputFault = 0x01,
+    ThermalShutdown = 0x02,
+    SafetyTimer = 0x03,
 }
 
 impl Display for BusStatus {
