@@ -45,6 +45,11 @@ const SYS_VOL_STEPS: u16 = 100;
 const SYS_VOFF_VOL_MIN: u16 = 3000;
 const SYS_VOFF_VOL_MAX: u16 = 3700;
 
+const TERM_CHG_CUR_BASE: u16 = 64;
+const TERM_CHG_CUR_STEP: u16 = 64;
+const TERM_CHG_CURRENT_MIN: u16 = 64;
+const TERM_CHG_CURRENT_MAX: u16 = 1024;
+
 impl<I2C> BQ25896<I2C>
 where
     I2C: I2c,
@@ -428,7 +433,37 @@ where
         Ok(PRE_CHG_CUR_STEP + (bits as u16 * PRE_CHG_CUR_STEP))
     }
 
-    // REGISTER 0x06
+    pub fn set_termination_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
+        // Validate step size
+        if milliampere % TERM_CHG_CUR_STEP != 0 {
+            return Err(PmuSensorError::CurrentStepInvalid64);
+        }
+
+        // Clamp to valid range
+        let current = milliampere.clamp(TERM_CHG_CURRENT_MIN, TERM_CHG_CURRENT_MAX);
+
+        // Read current register value
+        let mut val = self.dev.read_register(0x05)?;
+
+        // Clear bits 3:0, keep bits 7:4
+        val &= 0xF0;
+
+        // Calculate new current bits
+        let current_bits = ((current - TERM_CHG_CUR_BASE) / TERM_CHG_CUR_STEP) as u8;
+        val |= current_bits;
+
+        // Write back to register
+        self.dev.write_register(&[0x05, val])
+    }
+
+    /// Gets the termination current
+    pub fn get_termination_current(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x05)?;
+        let bits = val & 0x0F;
+        Ok(TERM_CHG_CUR_STEP + (bits as u16 * TERM_CHG_CUR_STEP))
+    }
+
+    // REGISTER 0x06 - todo
     // Charge Voltage Limit, Battery Precharge to Fast Charge Threshold, Battery Recharge Threshold Offset
 
     /// Sets the charge target voltage
