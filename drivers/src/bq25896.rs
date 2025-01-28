@@ -50,6 +50,12 @@ const TERM_CHG_CUR_STEP: u16 = 64;
 const TERM_CHG_CURRENT_MIN: u16 = 64;
 const TERM_CHG_CURRENT_MAX: u16 = 1024;
 
+const BAT_COMP_STEPS: u16 = 20;
+const BAT_COMP_MAX: u16 = 140;
+
+const VCLAMP_STEPS: u16 = 32;
+const VCLAMP_MAX: u16 = 224;
+
 impl<I2C> BQ25896<I2C>
 where
     I2C: I2c,
@@ -611,10 +617,47 @@ where
         }
     }
 
-    // REGISTER 0x08 todo onwards
+    // REGISTER 0x08
     // IR Compensation Resistor Setting, IR Compensation Voltage Clamp, Thermal Regulation Threshold
 
-    // REGISTER 0x09
+    pub fn set_ir_compensation_resistor(&mut self, milliohm: u16) -> Result<(), PmuSensorError> {
+        if milliohm % BAT_COMP_STEPS != 0 {
+            return Err(PmuSensorError::ResistanceStepInvalid20);
+        }
+
+        let resistance = milliohm.clamp(0, BAT_COMP_MAX);
+        let mut val = self.dev.read_register(0x08)?;
+        val &= 0x1F;
+        val |= ((resistance / BAT_COMP_STEPS) as u8) << 5;
+        self.dev.write_register(&[0x08, val])
+    }
+
+    pub fn set_ir_compensation_voltage_clamp(
+        &mut self,
+        millivolt: u16,
+    ) -> Result<(), PmuSensorError> {
+        if millivolt % VCLAMP_STEPS != 0 {
+            return Err(PmuSensorError::VoltageStepInvalid32);
+        }
+
+        let voltage = millivolt.clamp(0, VCLAMP_MAX);
+        let mut val = self.dev.read_register(0x08)?;
+        val &= 0xE3;
+        val |= ((voltage / VCLAMP_STEPS) as u8) << 2;
+        self.dev.write_register(&[0x08, val])
+    }
+
+    pub fn set_thermal_regulation_threshold(
+        &mut self,
+        threshold: ThermalRegThreshold,
+    ) -> Result<(), PmuSensorError> {
+        let mut val = self.dev.read_register(0x08)?;
+        val &= 0xFC;
+        val |= threshold as u8;
+        self.dev.write_register(&[0x08, val])
+    }
+
+    // REGISTER 0x09  todo onwards
     // Force Start Input Current Optimizer (ICO), Safety Timer Setting during DPM or Thermal Regulation,Force BATFET off to enable ship mode
     // JEITA High Temperature Voltage Setting, BATFET turn off delay control, BATFET full system reset enable, Current pulse control voltage up enable
     // Current pulse control voltage down enable
@@ -798,6 +841,8 @@ pub enum PmuSensorError {
     VoltageStepInvalid16,
     // Voltage step invalid (must be multiple of 100)
     VoltageStepInvalid100,
+    // Voltage step invalid (must be multiple of 32)
+    VoltageStepInvalid32,
     // Current step invalid (must be multiple of 64)
     CurrentStepInvalid64,
     // Current step invalid (must be multiple of 100)
@@ -806,6 +851,8 @@ pub enum PmuSensorError {
     CurrentStepInvalid50,
     // Needs to be inbetween  3000 and 3700mV
     PowerDownVoltageInvalid,
+    // Steps of 20mOhm
+    ResistanceStepInvalid20,
 }
 
 /// Status of the power input source
@@ -860,6 +907,14 @@ pub enum FastChargeTimer {
 pub enum JeitaLowTemperatureCurrent {
     Temp50,
     Temp20,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ThermalRegThreshold {
+    Celsius60 = 0,
+    Celsius80 = 1,
+    Celsius100 = 2,
+    Celsius120 = 3,
 }
 
 impl Display for BusStatus {
