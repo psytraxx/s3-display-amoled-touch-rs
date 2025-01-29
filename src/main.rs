@@ -222,6 +222,12 @@ fn main() -> ! {
         }
     });
 
+    let irq_ctl = touchpad
+        .read_irq_control()
+        .expect("read_irq_control failed");
+
+    info!("IRQ Control: {:?}", defmt::Debug2Format(&irq_ctl));
+
     let mut touch_registered = false;
 
     loop {

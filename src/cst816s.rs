@@ -45,6 +45,28 @@ pub struct TouchData {
     pub y: u16,
 }
 
+// Add after existing enums
+#[derive(Debug, Clone, Copy)]
+pub struct IrqControl {
+    pub en_test: bool,   // Bit 7: Enable test mode (periodic low pulses)
+    pub en_touch: bool,  // Bit 6: Enable touch detection interrupt
+    pub en_change: bool, // Bit 5: Enable touch state change interrupt
+    pub en_motion: bool, // Bit 4: Enable gesture detection interrupt
+    pub once_wlp: bool,  // Bit 0: Enable single pulse on long press
+}
+
+impl Default for IrqControl {
+    fn default() -> Self {
+        Self {
+            en_test: false,
+            en_touch: true,  // Enable touch by default
+            en_change: true, // Enable change by default
+            en_motion: true, // Enable motion by default
+            once_wlp: false,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CST816S<I2C, PIN> {
     dev: CST816SDevice<I2C>,
@@ -130,6 +152,32 @@ where
             .read_register(0xFC, &mut buffer)
             .map_err(|_| TouchSensorError::ReadError)?;
         Ok(buffer[0])
+    }
+
+    // Add these new methods
+    /// Read the current interrupt control settings
+    pub fn read_irq_control(&mut self) -> Result<IrqControl, TouchSensorError> {
+        let mut buffer = [0u8];
+        self.dev.read_register(0xFA, &mut buffer)?;
+
+        Ok(IrqControl {
+            en_test: (buffer[0] & 0b1000_0000) != 0,
+            en_touch: (buffer[0] & 0b0100_0000) != 0,
+            en_change: (buffer[0] & 0b0010_0000) != 0,
+            en_motion: (buffer[0] & 0b0001_0000) != 0,
+            once_wlp: (buffer[0] & 0b0000_0001) != 0,
+        })
+    }
+
+    /// Write interrupt control settings
+    pub fn write_irq_control(&mut self, control: &IrqControl) -> Result<(), TouchSensorError> {
+        let value = (if control.en_test { 0b1000_0000 } else { 0 })
+            | (if control.en_touch { 0b0100_0000 } else { 0 })
+            | (if control.en_change { 0b0010_0000 } else { 0 })
+            | (if control.en_motion { 0b0001_0000 } else { 0 })
+            | (if control.once_wlp { 0b0000_0001 } else { 0 });
+
+        self.dev.write_register(0xFA, value)
     }
 
     /// Writes the long press time setting to the sensor.
