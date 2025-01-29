@@ -1,10 +1,12 @@
 // https://github.com/fbiego/CST816S
-
+// https://github.com/mjdonders/CST816_TouchLib/blob/main/src/CST816Touch.cpp
 #![allow(dead_code)]
 use embedded_hal::{digital::InputPin, i2c::I2c};
 
 const CST816S_ADDRESS: u8 = 0x15;
 const ONE_EVENT_LEN: usize = 6 + 3; // RAW_TOUCH_EVENT_LEN + GESTURE_HEADER_LEN
+/// Number of bytes for a single touch event
+pub const RAW_TOUCH_EVENT_LEN: usize = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Gesture {
@@ -36,13 +38,15 @@ impl TryFrom<u8> for Gesture {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TouchData {
     pub gesture: Gesture,
     pub points: u8,
     pub event: u8,
-    pub x: u16,
-    pub y: u16,
+    pub x: i32,
+    pub y: i32,
+    pub pressure: u8,
+    pub area: u8,
 }
 
 // Add after existing enums
@@ -122,27 +126,43 @@ where
         &mut self,
         check_int_pin: bool,
     ) -> Result<Option<TouchData>, TouchSensorError> {
-        let mut data = TouchData::default();
+        // return if no touch detected
+        if check_int_pin && !self.is_touch_available() {
+            return Ok(None);
+        }
+
         let mut buffer = [0u8; ONE_EVENT_LEN];
 
-        if !check_int_pin || self.is_touch_available() {
-            self.dev
-                .read_register(0x01, &mut buffer)
-                .map_err(|_| TouchSensorError::WriteError)?;
-            data.gesture = Gesture::try_from(buffer[0])?;
-            let points = buffer[1];
-            data.points = points;
-            if points > 0 {
-                data.event = buffer[2] >> 6;
-                data.x = (((buffer[2] & 0xF) as u16) << 8) + buffer[3] as u16;
-                data.y = (((buffer[4] & 0xF) as u16) << 8) + buffer[5] as u16;
-                Ok(Some(data))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
+        self.dev
+            .read_register(0x01, &mut buffer)
+            .map_err(|_| TouchSensorError::WriteError)?;
+
+        let points = buffer[1];
+
+        // return if no points detected
+        if points == 0 {
+            return Ok(None);
         }
+
+        let gesture = Gesture::try_from(buffer[0])?;
+        let touch_x_h_and_action = buffer[2];
+        let touch_y_h_and_finger = buffer[4];
+        let x = (buffer[3] as i32) | (((touch_x_h_and_action & 0x0F) as i32) << 8);
+        let y = (buffer[5] as i32) | (((touch_y_h_and_finger & 0x0F) as i32) << 8);
+        let event = touch_x_h_and_action >> 6;
+        let points = touch_y_h_and_finger >> 4;
+        let pressure = buffer[6];
+        let area = buffer[7];
+        let data = TouchData {
+            gesture,
+            points,
+            event,
+            x,
+            y,
+            pressure,
+            area,
+        };
+        Ok(Some(data))
     }
 
     /// Reads the long press time setting from the sensor.
