@@ -121,7 +121,7 @@ fn main() -> ! {
     // Initialize touchpad
     let touch_int = peripherals.GPIO21;
     let touch_int = Input::new(touch_int, Pull::None);
-    let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int, delay);
+    let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int);
 
     // Detect SPI model
     detect_spi_model(AtomicDevice::new(i2c_ref_cell));

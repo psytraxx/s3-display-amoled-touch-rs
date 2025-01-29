@@ -1,14 +1,10 @@
-#![allow(dead_code)]
-use embedded_hal::{delay::DelayNs, digital::InputPin, i2c::I2c};
+// https://github.com/fbiego/CST816S
 
-const REG_DOUBLE_CLICK: u8 = 0xEC;
-const REG_AUTO_RESET: u8 = 0xFB;
-const REG_TOUCH_DATA: u8 = 0x01;
-const REG_VERSION: u8 = 0xA7;
-const REG_AUTO_SLEEP: u8 = 0xFE;
-const REG_AUTO_SLEEP_TIME: u8 = 0xF9;
-const REG_STANDBY: u8 = 0xA5;
+#![allow(dead_code)]
+use embedded_hal::{digital::InputPin, i2c::I2c};
+
 const CST816S_ADDRESS: u8 = 0x15;
+const ONE_EVENT_LEN: usize = 6 + 3; // RAW_TOUCH_EVENT_LEN + GESTURE_HEADER_LEN
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Gesture {
@@ -50,58 +46,54 @@ pub struct TouchData {
 }
 
 #[derive(Debug)]
-pub struct CST816S<I2C, PIN, DELAY> {
-    i2c: I2C,
+pub struct CST816S<I2C, PIN> {
+    dev: CST816SDevice<I2C>,
     touch_int: PIN,
-    delay: DELAY,
-    address: u8,
 }
 
-impl<I2C, PIN, DELAY> CST816S<I2C, PIN, DELAY>
+impl<I2C, PIN> CST816S<I2C, PIN>
 where
     I2C: I2c,
     PIN: InputPin,
-    DELAY: DelayNs,
 {
     /// Create a new CST816S instance
-    pub fn new(i2c: I2C, touch_int: PIN, delay: DELAY) -> Self {
+    pub fn new(i2c: I2C, touch_int: PIN) -> Self {
         Self {
-            i2c,
+            dev: CST816SDevice::new(i2c, CST816S_ADDRESS),
             touch_int,
-            address: CST816S_ADDRESS,
-            delay,
         }
     }
 
     /// Enable double click
     pub fn enable_double_click(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(REG_DOUBLE_CLICK, 0x01)
+        self.dev.write_register(0xEC, 0x01)
     }
 
     pub fn enable_auto_reset(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(REG_AUTO_RESET, 0x01)
+        self.dev.write_register(0xFB, 0x01)
     }
 
     pub fn get_version(&mut self) -> Result<u8, TouchSensorError> {
         let mut buffer = [0u8; 1];
-        self.read_register(REG_VERSION, &mut buffer)?;
+        self.dev.read_register(0xA9, &mut buffer)?;
         Ok(buffer[0])
     }
 
     /// Disable auto sleep mode
     pub fn disable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(REG_AUTO_SLEEP, 0xFE)
+        self.dev.write_register(0xFE, 0x01)
     }
 
     /// Enable auto sleep mode
     pub fn enable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
-        self.write_register(REG_AUTO_SLEEP, 0x00)
+        self.dev.write_register(0xFE, 0x00)
     }
 
+    /// Set auto sleep time
     pub fn set_auto_sleep_time(&mut self, mut seconds: i32) -> Result<(), TouchSensorError> {
         seconds = seconds.clamp(1, 255);
 
-        self.write_register(REG_AUTO_SLEEP_TIME, seconds as u8)
+        self.dev.write_register(0xF9, seconds as u8)
     }
 
     pub fn read_touch(
@@ -109,10 +101,11 @@ where
         check_int_pin: bool,
     ) -> Result<Option<TouchData>, TouchSensorError> {
         let mut data = TouchData::default();
-        let mut buffer = [0u8; 7];
+        let mut buffer = [0u8; ONE_EVENT_LEN];
 
         if !check_int_pin || self.is_touch_available() {
-            self.read_register(REG_TOUCH_DATA, &mut buffer)
+            self.dev
+                .read_register(0x01, &mut buffer)
                 .map_err(|_| TouchSensorError::WriteError)?;
             data.gesture = Gesture::try_from(buffer[0])?;
             data.points = buffer[1];
@@ -125,20 +118,28 @@ where
         }
     }
 
-    /// Put the CST816S sensor to sleep
-    pub fn sleep(&mut self) -> Result<(), TouchSensorError> {
-        // Delay for 50 milliseconds
-        self.delay.delay_ms(50);
+    fn is_touch_available(&mut self) -> bool {
+        self.touch_int.is_low().unwrap()
+    }
+}
 
-        // Write standby value to register 0xA5
-        self.write_register(REG_STANDBY, 0x03)?;
+#[derive(Debug)]
+struct CST816SDevice<I2C> {
+    i2c: I2C,
+    address: u8,
+}
 
-        Ok(())
+impl<I2C> CST816SDevice<I2C>
+where
+    I2C: I2c,
+{
+    fn new(i2c: I2C, adr: u8) -> Self {
+        Self { i2c, address: adr }
     }
 
-    fn write_register(&mut self, reg: u8, data: u8) -> Result<(), TouchSensorError> {
+    fn write_register(&mut self, register_address: u8, data: u8) -> Result<(), TouchSensorError> {
         let mut buffer = [0u8; 2]; // Assuming 1 byte register + 1 byte data
-        buffer[0] = reg;
+        buffer[0] = register_address;
         buffer[1] = data;
 
         self.i2c
@@ -158,10 +159,6 @@ where
             .write_read(self.address, &[register_address], buffer)
             .map_err(|_| TouchSensorError::ReadError)?;
         Ok(())
-    }
-
-    fn is_touch_available(&mut self) -> bool {
-        self.touch_int.is_low().unwrap()
     }
 }
 
