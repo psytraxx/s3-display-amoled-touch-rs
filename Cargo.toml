@@ -30,6 +30,10 @@ slint = { version = "1.9.1", default-features = false, features = [
 [build-dependencies]
 slint-build = "1.9.1"
 
+[profile.dev]
+# Rust debug is too slow.
+# For debug builds always builds with some optimization
+opt-level = "s"
 
 [profile.release]
 codegen-units = 1        # LLVM can perform better optimizations using a single thread
