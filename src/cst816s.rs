@@ -95,6 +95,16 @@ impl Default for IrqControl {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MotionMask {
+    /// Enable double-click detection
+    pub double_click: bool,
+    /// Enable continuous up/down swipe
+    pub continuous_updown: bool,
+    /// Enable continuous left/right swipe
+    pub continuous_leftright: bool,
+}
+
 #[derive(Debug)]
 pub struct CST816S<I2C, PIN> {
     dev: CST816SDevice<I2C>,
@@ -112,11 +122,6 @@ where
             dev: CST816SDevice::new(i2c, CST816S_ADDRESS),
             touch_int,
         }
-    }
-
-    /// Enable double click
-    pub fn enable_double_click(&mut self) -> Result<(), TouchSensorError> {
-        self.dev.write_register(0xEC, 0x01)
     }
 
     pub fn enable_auto_reset(&mut self) -> Result<(), TouchSensorError> {
@@ -233,6 +238,35 @@ where
             .write_register(0xFC, time)
             .map_err(|_| TouchSensorError::WriteError)?;
         Ok(())
+    }
+
+    /// Get current motion mask settings
+    pub fn get_motion_mask(&mut self) -> Result<MotionMask, TouchSensorError> {
+        let mut buffer = [0u8];
+        self.dev.read_register(0xEC, &mut buffer)?;
+
+        Ok(MotionMask {
+            double_click: (buffer[0] & 0b0000_0001) != 0,
+            continuous_updown: (buffer[0] & 0b0000_0010) != 0,
+            continuous_leftright: (buffer[0] & 0b0000_0100) != 0,
+        })
+    }
+
+    /// Set motion mask settings
+    pub fn set_motion_mask(&mut self, mask: &MotionMask) -> Result<(), TouchSensorError> {
+        let value = (if mask.double_click { 0b0000_0001 } else { 0 })
+            | (if mask.continuous_updown {
+                0b0000_0010
+            } else {
+                0
+            })
+            | (if mask.continuous_leftright {
+                0b0000_0100
+            } else {
+                0
+            });
+
+        self.dev.write_register(0xEC, value)
     }
 
     fn is_touch_available(&mut self) -> bool {

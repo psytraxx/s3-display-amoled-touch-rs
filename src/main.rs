@@ -7,7 +7,7 @@ use alloc::rc::Rc;
 use alloc::string::ToString;
 use bq25896x::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
 use core::time::Duration;
-use cst816s::{Event, IrqControl, CST816S};
+use cst816s::{Event, IrqControl, MotionMask, CST816S};
 use defmt::{error, info};
 use draw_buffer::DrawBuffer;
 use embedded_hal::i2c::I2c as I2CBus;
@@ -227,12 +227,19 @@ fn main() -> ! {
         .expect("write_irq_control failed");
 
     touchpad
-        .enable_double_click()
-        .expect("enable_double_click failed");
-
-    touchpad
         .set_long_press_time(2)
         .expect("set_long_press_time failed");
+
+    touchpad
+        .set_motion_mask(&MotionMask {
+            double_click: true,
+            continuous_updown: true,
+            continuous_leftright: true,
+        })
+        .expect("set_motion_mask failed");
+
+    let t = touchpad.get_motion_mask().expect("get_motion_mask failed");
+    info!("Motion mask: {:?}", defmt::Debug2Format(&t));
 
     let irq_ctl = touchpad.get_irq_control().expect("read_irq_control failed");
 
