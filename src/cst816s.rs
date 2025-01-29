@@ -108,14 +108,43 @@ where
                 .read_register(0x01, &mut buffer)
                 .map_err(|_| TouchSensorError::WriteError)?;
             data.gesture = Gesture::try_from(buffer[0])?;
-            data.points = buffer[1];
-            data.event = buffer[2] >> 6;
-            data.x = (((buffer[2] & 0xF) as u16) << 8) + buffer[3] as u16;
-            data.y = (((buffer[4] & 0xF) as u16) << 8) + buffer[5] as u16;
-            Ok(Some(data))
+            let points = buffer[1];
+            data.points = points;
+            if points > 0 {
+                data.event = buffer[2] >> 6;
+                data.x = (((buffer[2] & 0xF) as u16) << 8) + buffer[3] as u16;
+                data.y = (((buffer[4] & 0xF) as u16) << 8) + buffer[5] as u16;
+                Ok(Some(data))
+            } else {
+                Ok(None)
+            }
         } else {
             Ok(None)
         }
+    }
+
+    /// Reads the long press time setting from the sensor.
+    pub fn read_long_press_time(&mut self) -> Result<u8, TouchSensorError> {
+        let mut buffer = [0];
+        self.dev
+            .read_register(0xFC, &mut buffer)
+            .map_err(|_| TouchSensorError::ReadError)?;
+        Ok(buffer[0])
+    }
+
+    /// Writes the long press time setting to the sensor.
+    ///
+    /// # Arguments
+    ///
+    /// * `time` - The long press duration in seconds (0 to disable, 1-10 for duration).
+    pub fn write_long_press_time(&mut self, time: u8) -> Result<(), TouchSensorError> {
+        if time > 10 {
+            return Err(TouchSensorError::InvalidLongPressTime);
+        }
+        self.dev
+            .write_register(0xFC, time)
+            .map_err(|_| TouchSensorError::WriteError)?;
+        Ok(())
     }
 
     fn is_touch_available(&mut self) -> bool {
@@ -168,4 +197,5 @@ pub enum TouchSensorError {
     WriteError,
     ReadError,
     UnknownGesture(u8),
+    InvalidLongPressTime,
 }
