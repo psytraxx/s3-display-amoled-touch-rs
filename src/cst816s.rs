@@ -1,16 +1,17 @@
 // https://github.com/fbiego/CST816S
 // https://github.com/mjdonders/CST816_TouchLib/blob/main/src/CST816Touch.cpp
+// https://github.com/IniterWorker/cst816s
 #![allow(dead_code)]
+use defmt::warn;
 use embedded_hal::{digital::InputPin, i2c::I2c};
 
 const CST816S_ADDRESS: u8 = 0x15;
-const ONE_EVENT_LEN: usize = 6 + 3; // RAW_TOUCH_EVENT_LEN + GESTURE_HEADER_LEN
+
 /// Number of bytes for a single touch event
 pub const RAW_TOUCH_EVENT_LEN: usize = 6;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Gesture {
-    #[default]
     None = 0x00,
     SwipeUp = 0x01,
     SwipeDown = 0x02,
@@ -21,19 +22,39 @@ pub enum Gesture {
     LongPress = 0x0C,
 }
 
-impl TryFrom<u8> for Gesture {
-    type Error = TouchSensorError;
-    fn try_from(value: u8) -> Result<Self, TouchSensorError> {
+impl From<u8> for Gesture {
+    fn from(value: u8) -> Self {
         match value {
-            0x00 => Ok(Gesture::None),
-            0x01 => Ok(Gesture::SwipeUp),
-            0x02 => Ok(Gesture::SwipeDown),
-            0x03 => Ok(Gesture::SwipeLeft),
-            0x04 => Ok(Gesture::SwipeRight),
-            0x05 => Ok(Gesture::SingleClick),
-            0x0B => Ok(Gesture::DoubleClick),
-            0x0C => Ok(Gesture::LongPress),
-            _ => Err(TouchSensorError::UnknownGesture(value)),
+            0x00 => Gesture::None,
+            0x01 => Gesture::SwipeUp,
+            0x02 => Gesture::SwipeDown,
+            0x03 => Gesture::SwipeLeft,
+            0x04 => Gesture::SwipeRight,
+            0x05 => Gesture::SingleClick,
+            0x0B => Gesture::DoubleClick,
+            0x0C => Gesture::LongPress,
+            _ => {
+                warn!("Unknown gesture: {}", value);
+                Gesture::None
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Event {
+    Down = 0,
+    Up = 1,
+    Contact = 2,
+}
+
+impl From<u8> for Event {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Event::Down,
+            1 => Event::Up,
+            2 => Event::Contact,
+            _ => panic!("Unknown event: {}", value),
         }
     }
 }
@@ -42,30 +63,33 @@ impl TryFrom<u8> for Gesture {
 pub struct TouchData {
     pub gesture: Gesture,
     pub points: u8,
-    pub event: u8,
-    pub x: i32,
-    pub y: i32,
-    pub pressure: u8,
-    pub area: u8,
+    pub event: Event,
+    pub x: u16,
+    pub y: u16,
 }
 
 // Add after existing enums
 #[derive(Debug, Clone, Copy)]
 pub struct IrqControl {
-    pub en_test: bool,   // Bit 7: Enable test mode (periodic low pulses)
-    pub en_touch: bool,  // Bit 6: Enable touch detection interrupt
-    pub en_change: bool, // Bit 5: Enable touch state change interrupt
-    pub en_motion: bool, // Bit 4: Enable gesture detection interrupt
-    pub once_wlp: bool,  // Bit 0: Enable single pulse on long press
+    /// Bit 7: EnTest (Enable test, periodically sends low pulses)
+    pub en_test: bool,
+    /// Bit 6: EnTouch (Sends low pulse on touch detection)
+    pub en_touch: bool,
+    /// Bit 5: EnChange (Sends low pulse on touch state change
+    pub en_change: bool,
+    /// Bit 4:  Bit 4: EnMotion (Sends low pulse on gesture detection)
+    pub en_motion: bool,
+    /// Bit 0: OnceWLP (Sends one low pulse on long press)
+    pub once_wlp: bool,
 }
 
 impl Default for IrqControl {
     fn default() -> Self {
         Self {
             en_test: false,
-            en_touch: true,  // Enable touch by default
-            en_change: true, // Enable change by default
-            en_motion: true, // Enable motion by default
+            en_touch: true,
+            en_change: true,
+            en_motion: true,
             once_wlp: false,
         }
     }
@@ -131,42 +155,38 @@ where
             return Ok(None);
         }
 
-        let mut buffer = [0u8; ONE_EVENT_LEN];
+        let mut buffer = [0u8; 13];
 
         self.dev
-            .read_register(0x01, &mut buffer)
+            .read_register(0x00, &mut buffer)
             .map_err(|_| TouchSensorError::WriteError)?;
 
-        let points = buffer[1];
+        let gesture = Gesture::from(buffer[1]);
+        let points = buffer[2] & 0x0F;
 
-        // return if no points detected
-        if points == 0 {
-            return Ok(None);
-        }
+        let x_high = buffer[3] & 0x0f;
+        let x_low = buffer[4];
 
-        let gesture = Gesture::try_from(buffer[0])?;
-        let touch_x_h_and_action = buffer[2];
-        let touch_y_h_and_finger = buffer[4];
-        let x = (buffer[3] as i32) | (((touch_x_h_and_action & 0x0F) as i32) << 8);
-        let y = (buffer[5] as i32) | (((touch_y_h_and_finger & 0x0F) as i32) << 8);
-        let event = touch_x_h_and_action >> 6;
-        let points = touch_y_h_and_finger >> 4;
-        let pressure = buffer[6];
-        let area = buffer[7];
+        let y_high = buffer[5] & 0x0f;
+        let y_low = buffer[6];
+
+        let x: u16 = (u16::from(x_high) << 8) | u16::from(x_low);
+        let y: u16 = (u16::from(y_high) << 8) | u16::from(y_low);
+
+        let event = Event::from(buffer[3] >> 6);
+
         let data = TouchData {
             gesture,
             points,
             event,
             x,
             y,
-            pressure,
-            area,
         };
         Ok(Some(data))
     }
 
     /// Reads the long press time setting from the sensor.
-    pub fn read_long_press_time(&mut self) -> Result<u8, TouchSensorError> {
+    pub fn get_long_press_time(&mut self) -> Result<u8, TouchSensorError> {
         let mut buffer = [0];
         self.dev
             .read_register(0xFC, &mut buffer)
@@ -176,7 +196,7 @@ where
 
     // Add these new methods
     /// Read the current interrupt control settings
-    pub fn read_irq_control(&mut self) -> Result<IrqControl, TouchSensorError> {
+    pub fn get_irq_control(&mut self) -> Result<IrqControl, TouchSensorError> {
         let mut buffer = [0u8];
         self.dev.read_register(0xFA, &mut buffer)?;
 
@@ -190,7 +210,7 @@ where
     }
 
     /// Write interrupt control settings
-    pub fn write_irq_control(&mut self, control: &IrqControl) -> Result<(), TouchSensorError> {
+    pub fn set_irq_control(&mut self, control: &IrqControl) -> Result<(), TouchSensorError> {
         let value = (if control.en_test { 0b1000_0000 } else { 0 })
             | (if control.en_touch { 0b0100_0000 } else { 0 })
             | (if control.en_change { 0b0010_0000 } else { 0 })
@@ -205,7 +225,7 @@ where
     /// # Arguments
     ///
     /// * `time` - The long press duration in seconds (0 to disable, 1-10 for duration).
-    pub fn write_long_press_time(&mut self, time: u8) -> Result<(), TouchSensorError> {
+    pub fn set_long_press_time(&mut self, time: u8) -> Result<(), TouchSensorError> {
         if time > 10 {
             return Err(TouchSensorError::InvalidLongPressTime);
         }

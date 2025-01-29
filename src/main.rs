@@ -7,7 +7,7 @@ use alloc::rc::Rc;
 use alloc::string::ToString;
 use bq25896x::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
 use core::time::Duration;
-use cst816s::CST816S;
+use cst816s::{Event, IrqControl, CST816S};
 use defmt::{error, info};
 use draw_buffer::DrawBuffer;
 use embedded_hal::i2c::I2c as I2CBus;
@@ -222,13 +222,21 @@ fn main() -> ! {
         }
     });
 
-    let irq_ctl = touchpad
-        .read_irq_control()
-        .expect("read_irq_control failed");
+    touchpad
+        .set_irq_control(&IrqControl::default())
+        .expect("write_irq_control failed");
+
+    touchpad
+        .enable_double_click()
+        .expect("enable_double_click failed");
+
+    touchpad
+        .set_long_press_time(2)
+        .expect("set_long_press_time failed");
+
+    let irq_ctl = touchpad.get_irq_control().expect("read_irq_control failed");
 
     info!("IRQ Control: {:?}", defmt::Debug2Format(&irq_ctl));
-
-    let mut touch_registered = false;
 
     loop {
         // Update timers and animations
@@ -240,26 +248,28 @@ fn main() -> ! {
 
         // Read touch events
         if let Some(touch_event) = touchpad.read_touch(true).expect("read touch failed") {
+            info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
             let position = LogicalPosition::new(
                 DISPLAY_WIDTH as f32 - touch_event.x as f32,
                 DISPLAY_HEIGHT as f32 - touch_event.y as f32,
             );
 
-            // Handle touch events
-            if touch_event.points > 0 && !touch_registered {
-                window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
-                    position,
-                    button: PointerEventButton::Left,
-                });
-                touch_registered = true;
-            } else if touch_event.points > 0 && touch_registered {
-                window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position });
-            } else if touch_event.points == 0 && touch_registered {
-                window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
-                    position,
-                    button: PointerEventButton::Left,
-                });
-                touch_registered = false;
+            match touch_event.event {
+                Event::Down => {
+                    window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
+                        position,
+                        button: PointerEventButton::Left,
+                    });
+                }
+                Event::Contact => {
+                    window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position });
+                }
+                Event::Up => {
+                    window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
+                        position,
+                        button: PointerEventButton::Left,
+                    });
+                }
             }
         }
 
