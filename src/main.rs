@@ -39,7 +39,7 @@ slint::include_modules!();
 
 extern crate alloc;
 
-mod cst816s;
+pub mod cst816s;
 mod draw_buffer;
 
 pub const DISPLAY_HEIGHT: u16 = 240;
