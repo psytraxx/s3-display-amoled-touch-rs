@@ -60,11 +60,10 @@ Rust example for the LilyGo T-Display-S3 AMOLED Plus development board.
   - Bus status  
   - Battery voltage
   - Temperature
-- Touch gestures supported:
-  - Single tap
-  - Double tap
-  - Long press
-  - Swipe (up/down/left/right)
+
+### Generate documentation
+
+    cargo doc -p s3-display-amoled-touch-app --no-deps  --open
 
 ## Contributing
 
