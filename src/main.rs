@@ -7,8 +7,9 @@ use alloc::rc::Rc;
 use alloc::string::ToString;
 use bq25896x::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
 use core::time::Duration;
-use cst816s::CST816S;
-use defmt::{error, info};
+use cst816s::command::Touch;
+use cst816s::Cst816s;
+use defmt::{error, info, warn};
 use draw_buffer::DrawBuffer;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::AtomicDevice;
@@ -39,7 +40,6 @@ slint::include_modules!();
 
 extern crate alloc;
 
-mod cst816s;
 mod draw_buffer;
 
 pub const DISPLAY_HEIGHT: u16 = 240;
@@ -121,7 +121,7 @@ fn main() -> ! {
     // Initialize touchpad
     let touch_int = peripherals.GPIO21;
     let touch_int = Input::new(touch_int, Pull::None);
-    let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int, delay);
+    let mut touchpad = Cst816s::new(AtomicDevice::new(i2c_ref_cell), delay);
 
     // Detect SPI model
     detect_spi_model(AtomicDevice::new(i2c_ref_cell));
@@ -222,8 +222,6 @@ fn main() -> ! {
         }
     });
 
-    let mut touch_registered = false;
-
     loop {
         // Update timers and animations
         slint::platform::update_timers_and_animations();
@@ -232,28 +230,39 @@ fn main() -> ! {
             continue;
         }
 
-        // Read touch events
-        if let Some(touch_event) = touchpad.read_touch(true).expect("read touch failed") {
-            let position = LogicalPosition::new(
-                DISPLAY_WIDTH as f32 - touch_event.x as f32,
-                DISPLAY_HEIGHT as f32 - touch_event.y as f32,
-            );
+        if !touch_int.is_low() {
+            continue;
+        }
 
-            // Handle touch events
-            if touch_event.points > 0 && !touch_registered {
-                window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
-                    position,
-                    button: PointerEventButton::Left,
-                });
-                touch_registered = true;
-            } else if touch_event.points > 0 && touch_registered {
-                window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position });
-            } else if touch_event.points == 0 && touch_registered {
-                window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
-                    position,
-                    button: PointerEventButton::Left,
-                });
-                touch_registered = false;
+        // Read touch events
+        match touchpad.read_event() {
+            Ok(touch_event) => {
+                let position = LogicalPosition::new(
+                    DISPLAY_WIDTH as f32 - touch_event.x as f32,
+                    DISPLAY_HEIGHT as f32 - touch_event.y as f32,
+                );
+                match touch_event.touch_type {
+                    Touch::Down => {
+                        window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
+                            position,
+                            button: PointerEventButton::Left,
+                        });
+                    }
+                    Touch::Contact => {
+                        window.dispatch_event(slint::platform::WindowEvent::PointerMoved {
+                            position,
+                        });
+                    }
+                    Touch::Up => {
+                        window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
+                            position,
+                            button: PointerEventButton::Left,
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Touchpad read failed {}", defmt::Debug2Format(&e));
             }
         }
 
