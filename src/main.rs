@@ -121,7 +121,7 @@ fn main() -> ! {
     // Initialize touchpad
     let touch_int = peripherals.GPIO21;
     let touch_int = Input::new(touch_int, Pull::None);
-    let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int, delay);
+    let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int);
 
     // Detect SPI model
     detect_spi_model(AtomicDevice::new(i2c_ref_cell));
@@ -234,6 +234,7 @@ fn main() -> ! {
 
         // Read touch events
         if let Some(touch_event) = touchpad.read_touch(true).expect("read touch failed") {
+            info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
             let position = LogicalPosition::new(
                 DISPLAY_WIDTH as f32 - touch_event.x as f32,
                 DISPLAY_HEIGHT as f32 - touch_event.y as f32,
