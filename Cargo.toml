@@ -13,7 +13,7 @@ esp-backtrace = { version = "0.15.0", features = [
 mipidsi = { git = "https://github.com/almindor/mipidsi.git", branch = "master" }
 bq25896x = { git = "https://github.com/psytraxx/bq25896x-rs.git", branch = "main" }
 esp-hal = { version = "0.23.0", features = ["esp32s3", "defmt", "octal-psram"] }
-esp-alloc = { version = "0.6.0" }
+esp-alloc = { version = "0.7.0" }
 defmt = "0.3.8"
 defmt-rtt = "0.4.1"
 embedded-hal = { version = "1.0.0", features = ["defmt-03"] }

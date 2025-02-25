@@ -64,7 +64,7 @@ const PMU_CONSTANT_CHARGE_CURRENT: u16 = 1536;
 
 #[main]
 fn main() -> ! {
-    esp_alloc::heap_allocator!(72 * 1024);
+    esp_alloc::heap_allocator!(size: 72 * 1024);
 
     // Initialize delay
     let mut delay = Delay::new();
