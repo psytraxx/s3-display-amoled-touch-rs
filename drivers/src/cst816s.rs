@@ -2,7 +2,6 @@
 // https://github.com/mjdonders/CST816_TouchLib/blob/main/src/CST816Touch.cpp
 // https://github.com/IniterWorker/cst816s
 #![allow(dead_code)]
-use defmt::warn;
 use embedded_hal::{digital::InputPin, i2c::I2c};
 
 const CST816S_ADDRESS: u8 = 0x15;
@@ -33,10 +32,7 @@ impl From<u8> for Gesture {
             0x05 => Gesture::SingleClick,
             0x0B => Gesture::DoubleClick,
             0x0C => Gesture::LongPress,
-            _ => {
-                warn!("Unknown gesture: {}", value);
-                Gesture::None
-            }
+            _ => Gesture::None,
         }
     }
 }

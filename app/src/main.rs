@@ -5,11 +5,11 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
-use bq25896x::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
 use core::time::Duration;
-use cst816s::CST816S;
 use defmt::{error, info};
 use draw_buffer::DrawBuffer;
+use drivers::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
+use drivers::cst816s::CST816S;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::AtomicDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
@@ -39,7 +39,6 @@ slint::include_modules!();
 
 extern crate alloc;
 
-mod cst816s;
 mod draw_buffer;
 
 pub const DISPLAY_HEIGHT: u16 = 240;
