@@ -94,8 +94,9 @@ pub struct Ld2410Driver<UART> {
     engineering_mode: bool,
 }
 
-impl<UART> Ld2410Driver<UART> where
-UART: Read + Write
+impl<UART> Ld2410Driver<UART> 
+where
+    UART: Read + Write,
 {
     /// Create a new LD2410 driver from a UART instance.
     pub fn new(uart: UART) -> Self {
@@ -130,9 +131,13 @@ UART: Read + Write
     /// Ok(None) if the packet is not a valid measurement packet,
     /// or an error.
     pub fn read_packet(&mut self) -> Result<Option<RadarData>, SensorError<UART::Error>> {
+        const HEADER: [u8; 4] = [0xF4, 0xF3, 0xF2, 0xF1];
+        const TAIL: [u8; 4] = [0xF8, 0xF7, 0xF6, 0xF5];
+        const EXPECTED_LENGTH: usize = 13;
+
         let mut header = [0u8; 4];
         self.read_bytes(&mut header)?;
-        if header != [0xF4, 0xF3, 0xF2, 0xF1] {
+        if header != HEADER {
             return Err(SensorError::InvalidHeader);
         }
 
@@ -140,20 +145,20 @@ UART: Read + Write
         self.read_bytes(&mut length_buf)?;
         let length = u16::from_le_bytes(length_buf) as usize;
 
-        if length != 13 {
-            let mut _dummy = [0u8; 13];
-            let _ = self.read_bytes(&mut _dummy);
+        if length != EXPECTED_LENGTH {
+            let mut _dummy = [0u8; EXPECTED_LENGTH];
+            self.read_bytes(&mut _dummy)?;
             let mut _tail = [0u8; 4];
-            let _ = self.read_bytes(&mut _tail);
+            self.read_bytes(&mut _tail)?;
             return Ok(None);
         }
 
-        let mut data_buf = [0u8; 13];
+        let mut data_buf = [0u8; EXPECTED_LENGTH];
         self.read_bytes(&mut data_buf)?;
 
         let mut tail = [0u8; 4];
         self.read_bytes(&mut tail)?;
-        if tail != [0xF8, 0xF7, 0xF6, 0xF5] {
+        if tail != TAIL {
             return Err(SensorError::InvalidFooter);
         }
 
@@ -170,20 +175,16 @@ UART: Read + Write
                 mov_l, mov_h, _mov_energy,
                 stat_l, stat_h, _stat_energy,
                 det_l, det_h, 0x55, 0x00
-            ] => {
-                if *data_type == 0x2 {
-                    let moving_distance = u16::from_le_bytes([*mov_l, *mov_h]);
-                    let stationary_distance = u16::from_le_bytes([*stat_l, *stat_h]);
-                    let detection_distance = u16::from_le_bytes([*det_l, *det_h]);
-                    Some(RadarData {
-                        target_status: *target_status,
-                        moving_distance,
-                        stationary_distance,
-                        detection_distance,
-                    })
-                } else {
-                    None
-                }
+            ] if *data_type == 0x2 => {
+                let moving_distance = u16::from_le_bytes([*mov_l, *mov_h]);
+                let stationary_distance = u16::from_le_bytes([*stat_l, *stat_h]);
+                let detection_distance = u16::from_le_bytes([*det_l, *det_h]);
+                Some(RadarData {
+                    target_status: *target_status,
+                    moving_distance,
+                    stationary_distance,
+                    detection_distance,
+                })
             }
             _ => None,
         }
@@ -197,9 +198,11 @@ UART: Read + Write
 
     /// Send a command to the LD2410 sensor.
     fn send_command(&mut self, cmd: CommandType, data: &[u8]) -> Result<(), SensorError<UART::Error>> {
+        const HEADER: [u8; 4] = [0xFD, 0xFC, 0xFB, 0xFA];
+        const FOOTER: [u8; 4] = [0x04, 0x03, 0x02, 0x01];
+
         let len = data.len() + 2;
-        let header = [0xFD, 0xFC, 0xFB, 0xFA];
-        for &byte in header.iter() {
+        for &byte in HEADER.iter() {
             self.write_byte(byte)?;
         }
 
@@ -213,8 +216,7 @@ UART: Read + Write
             self.write_byte(byte)?;
         }
 
-        let footer = [0x04, 0x03, 0x02, 0x01];
-        for &byte in footer.iter() {
+        for &byte in FOOTER.iter() {
             self.write_byte(byte)?;
         }
 
