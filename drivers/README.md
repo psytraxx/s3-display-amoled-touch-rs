@@ -10,6 +10,13 @@
   - Constant current
   - Constant voltage
 
+
+## HLK-LD2410 24Ghz Human Presence Sensor
+
+https://www.hlktech.net/index.php?id=988
+https://github.com/arendst/Tasmota/blob/development/tasmota/tasmota_xsns_sensor/xsns_102_ld2410.ino
+
+
 ### Generate documentation
 
     cargo doc -p bq25896x --no-deps  --open

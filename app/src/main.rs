@@ -5,6 +5,8 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
+use drivers::ld2410::Ld2410Driver;
+use esp_hal::uart::{Config as UartConfig, Uart};
 use core::time::Duration;
 use defmt::{error, info};
 use draw_buffer::DrawBuffer;
@@ -55,6 +57,8 @@ const PMU_CHARGE_TARGET_VOLTAGE: u16 = 4208;
 const PMU_PRECHARGE_CURRENT: u16 = 128;
 /// Constant charging current in mA for BQ25896
 const PMU_CONSTANT_CHARGE_CURRENT: u16 = 1536;
+// fifo_full_threshold (RX)
+const READ_BUF_SIZE: u16 = 64;
 
 // credits to
 // https://github.com/slint-ui/slint/blob/master/examples/mcu-board-support/esp32_s3_box.rs and
@@ -74,6 +78,21 @@ fn main() -> ! {
         config.cpu_clock = CpuClock::_240MHz;
         config
     });
+
+    let config = UartConfig::default().with_rx_fifo_full_threshold(READ_BUF_SIZE);
+
+    let uart0 = Uart::new(peripherals.UART0, config).expect("Failed to initialize UART0");
+
+    let mut t = Ld2410Driver::new(uart0);
+    
+    match t.read_packet() {
+        Ok(data) => {
+            info!("Radar sensore data: {}", defmt::Debug2Format(&data));
+        },
+        Err(e) => {
+            error!("Error: {}", defmt::Debug2Format(&e));
+        }
+    }
 
     let mut rtc = Rtc::new(peripherals.LPWR);
     rtc.rwdt.disable();
