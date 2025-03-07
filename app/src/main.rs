@@ -6,11 +6,11 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
 use core::time::Duration;
-use defmt::{error, info, warn};
+use defmt::{error, info};
 use draw_buffer::DrawBuffer;
 use drivers::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
 use drivers::cst816s::CST816S;
-use drivers::ld2410::Ld2410Driver;
+use drivers::ld2410::LD2410;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::AtomicDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
@@ -70,7 +70,7 @@ fn main() -> ! {
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
     // Initialize delay
-    let mut delay = Delay::new();
+    let delay = Delay::new();
 
     // Initialize peripherals
     let peripherals = esp_hal::init({
@@ -84,74 +84,46 @@ fn main() -> ! {
 
     let config = UartConfig::default()
         .with_baudrate(256000)
-        // .with_rx_fifo_full_threshold(READ_BUF_SIZE)
+        .with_rx_fifo_full_threshold(READ_BUF_SIZE)
         .with_parity(esp_hal::uart::Parity::None)
         .with_stop_bits(esp_hal::uart::StopBits::_1);
 
     let uart0 = Uart::new(peripherals.UART0, config).expect("Failed to initialize UART0");
 
-    let mut buffer = [0_u8; 64];
-
-    info!("Reading UART0 data");
-    let mut uart0 = uart0
+    let uart0 = uart0
         .with_rx(peripherals.GPIO44)
         .with_tx(peripherals.GPIO43);
 
+    // Create the LD2410 radar instance
+    let mut radar = LD2410::new(uart0);
+
     loop {
-        match uart0.read_bytes(&mut buffer) {
-            Ok(()) => {
-                info!("UART0 data: {:?}", buffer);
-                for i in 0..buffer.len().saturating_sub(3) {
-                    if buffer[i] == 0xF4
-                        && buffer[i + 1] == 0xF3
-                        && buffer[i + 2] == 0xF2
-                        && buffer[i + 3] == 0xF1
-                    {
-                        info!("Found LD2410 header at position {}", i);
-
-                        // Look for the footer after the header
-                        for j in (i + 4)..buffer.len().saturating_sub(3) {
-                            if buffer[j] == 0xF8
-                                && buffer[j + 1] == 0xF7
-                                && buffer[j + 2] == 0xF6
-                                && buffer[j + 3] == 0xF5
-                            {
-                                info!("Found LD2410 footer at position {}", j);
-
-                                // Calculate the data length
-                                let data_length = j - (i + 4);
-
-                                // Print the data between header and footer
-                                if data_length > 0 {
-                                    info!("LD2410 data: {:?}", &buffer[(i + 4)..j]);
-                                } else {
-                                    info!("LD2410 data packet is empty");
-                                }
-
-                                // No need to continue searching after finding a valid packet
-                                break;
-                            }
-                        }
-                    }
+        match radar.read_frame() {
+            Ok(Some(radar_data)) => {
+                // Process radar data if needed
+                // For example:
+                if radar_data.movement_target_distance > 0 {
+                    info!(
+                        "Movement detected at {} cm",
+                        radar_data.movement_target_distance
+                    );
                 }
+                if radar_data.stationary_target_distance > 0 {
+                    info!(
+                        "Stationary target at {} cm",
+                        radar_data.stationary_target_distance
+                    );
+                }
+                info!("Target status: {}", radar_data.target_status);
             }
-            Err(_) => {
-                warn!("Failed to read UART0 data, retrying...");
-                delay.delay_millis(100_u32);
+            Ok(None) => {
+                // Engineering data or other non-target data received
+            }
+            Err(e) => {
+                error!("Error reading radar frame: {}", defmt::Debug2Format(&e));
             }
         }
     }
-
-    //let mut t = Ld2410Driver::new(uart0);
-
-    /*  match t.read_packet() {
-        Ok(data) => {
-            info!("Radar sensore data: {}", defmt::Debug2Format(&data));
-        }
-        Err(e) => {
-            error!("Error: {}", defmt::Debug2Format(&e));
-        }
-    }*/
 
     let mut rtc = Rtc::new(peripherals.LPWR);
     rtc.rwdt.disable();
