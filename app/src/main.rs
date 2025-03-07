@@ -5,13 +5,12 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::ToString;
-use drivers::ld2410::Ld2410Driver;
-use esp_hal::uart::{Config as UartConfig, Uart};
 use core::time::Duration;
-use defmt::{error, info};
+use defmt::{error, info, warn};
 use draw_buffer::DrawBuffer;
 use drivers::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
 use drivers::cst816s::CST816S;
+use drivers::ld2410::Ld2410Driver;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::AtomicDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
@@ -29,6 +28,7 @@ use esp_hal::spi::Mode;
 use esp_hal::time::now;
 use esp_hal::time::RateExtU32;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::uart::{Config as UartConfig, Uart};
 use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, main};
 use mipidsi::interface::SpiInterface;
@@ -79,20 +79,79 @@ fn main() -> ! {
         config
     });
 
-    let config = UartConfig::default().with_rx_fifo_full_threshold(READ_BUF_SIZE);
+    // Initialize PSRAM allocator
+    psram_allocator!(peripherals.PSRAM, esp_hal::psram);
+
+    let config = UartConfig::default()
+        .with_baudrate(256000)
+        // .with_rx_fifo_full_threshold(READ_BUF_SIZE)
+        .with_parity(esp_hal::uart::Parity::None)
+        .with_stop_bits(esp_hal::uart::StopBits::_1);
 
     let uart0 = Uart::new(peripherals.UART0, config).expect("Failed to initialize UART0");
 
-    let mut t = Ld2410Driver::new(uart0);
-    
-    match t.read_packet() {
+    let mut buffer = [0_u8; 64];
+
+    info!("Reading UART0 data");
+    let mut uart0 = uart0
+        .with_rx(peripherals.GPIO44)
+        .with_tx(peripherals.GPIO43);
+
+    loop {
+        match uart0.read_bytes(&mut buffer) {
+            Ok(()) => {
+                info!("UART0 data: {:?}", buffer);
+                for i in 0..buffer.len().saturating_sub(3) {
+                    if buffer[i] == 0xF4
+                        && buffer[i + 1] == 0xF3
+                        && buffer[i + 2] == 0xF2
+                        && buffer[i + 3] == 0xF1
+                    {
+                        info!("Found LD2410 header at position {}", i);
+
+                        // Look for the footer after the header
+                        for j in (i + 4)..buffer.len().saturating_sub(3) {
+                            if buffer[j] == 0xF8
+                                && buffer[j + 1] == 0xF7
+                                && buffer[j + 2] == 0xF6
+                                && buffer[j + 3] == 0xF5
+                            {
+                                info!("Found LD2410 footer at position {}", j);
+
+                                // Calculate the data length
+                                let data_length = j - (i + 4);
+
+                                // Print the data between header and footer
+                                if data_length > 0 {
+                                    info!("LD2410 data: {:?}", &buffer[(i + 4)..j]);
+                                } else {
+                                    info!("LD2410 data packet is empty");
+                                }
+
+                                // No need to continue searching after finding a valid packet
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                warn!("Failed to read UART0 data, retrying...");
+                delay.delay_millis(100_u32);
+            }
+        }
+    }
+
+    //let mut t = Ld2410Driver::new(uart0);
+
+    /*  match t.read_packet() {
         Ok(data) => {
             info!("Radar sensore data: {}", defmt::Debug2Format(&data));
-        },
+        }
         Err(e) => {
             error!("Error: {}", defmt::Debug2Format(&e));
         }
-    }
+    }*/
 
     let mut rtc = Rtc::new(peripherals.LPWR);
     rtc.rwdt.disable();
@@ -101,9 +160,6 @@ fn main() -> ! {
     timer_group0.wdt.disable();
     let mut timer_group1 = TimerGroup::new(peripherals.TIMG1);
     timer_group1.wdt.disable();
-
-    // Initialize PSRAM allocator
-    psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
     // Initialize I2C bus
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
@@ -252,7 +308,7 @@ fn main() -> ! {
 
         // Read touch events
         if let Some(touch_event) = touchpad.read_touch(true).expect("read touch failed") {
-            info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
+            //info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
             let position = LogicalPosition::new(
                 DISPLAY_WIDTH as f32 - touch_event.x as f32,
                 DISPLAY_HEIGHT as f32 - touch_event.y as f32,

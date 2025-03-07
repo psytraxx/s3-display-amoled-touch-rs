@@ -1,3 +1,4 @@
+use defmt::info;
 use embedded_io::{Error, Read, Write};
 
 /// Driver for the LD2410 radar sensor.
@@ -94,20 +95,20 @@ pub struct Ld2410Driver<UART> {
     engineering_mode: bool,
 }
 
-impl<UART> Ld2410Driver<UART> 
+impl<UART> Ld2410Driver<UART>
 where
     UART: Read + Write,
 {
     /// Create a new LD2410 driver from a UART instance.
     pub fn new(uart: UART) -> Self {
-        Self { 
-            uart, 
+        Self {
+            uart,
             config: Ld2410Config::default(),
             in_config_mode: false,
             engineering_mode: false,
         }
     }
-    
+
     /// Get the currently configured parameters
     pub fn config(&self) -> &Ld2410Config {
         &self.config
@@ -115,7 +116,9 @@ where
 
     /// Helper: Reads exactly `buf.len()` bytes into the provided buffer.
     fn read_bytes(&mut self, buf: &mut [u8]) -> Result<(), SensorError<UART::Error>> {
+        info!("Reading {} bytes", buf.len());
         self.uart.read(buf)?;
+        info!("Read: {:?}", buf);
         Ok(())
     }
 
@@ -167,15 +170,11 @@ where
 
     /// Decodes the raw measurement data.
     /// Returns Some(RadarData) if data_type is 0x2, otherwise None.
-    fn decode_radar_data(buf: &[u8; 13]) -> Option<RadarData> {
+    pub fn decode_radar_data(buf: &[u8; 13]) -> Option<RadarData> {
         match buf {
-            [
-                data_type, 0xAA,
-                target_status,
-                mov_l, mov_h, _mov_energy,
-                stat_l, stat_h, _stat_energy,
-                det_l, det_h, 0x55, 0x00
-            ] if *data_type == 0x2 => {
+            [data_type, 0xAA, target_status, mov_l, mov_h, _mov_energy, stat_l, stat_h, _stat_energy, det_l, det_h, 0x55, 0x00]
+                if *data_type == 0x2 =>
+            {
                 let moving_distance = u16::from_le_bytes([*mov_l, *mov_h]);
                 let stationary_distance = u16::from_le_bytes([*stat_l, *stat_h]);
                 let detection_distance = u16::from_le_bytes([*det_l, *det_h]);
@@ -197,7 +196,11 @@ where
     }
 
     /// Send a command to the LD2410 sensor.
-    fn send_command(&mut self, cmd: CommandType, data: &[u8]) -> Result<(), SensorError<UART::Error>> {
+    fn send_command(
+        &mut self,
+        cmd: CommandType,
+        data: &[u8],
+    ) -> Result<(), SensorError<UART::Error>> {
         const HEADER: [u8; 4] = [0xFD, 0xFC, 0xFB, 0xFA];
         const FOOTER: [u8; 4] = [0x04, 0x03, 0x02, 0x01];
 
@@ -222,27 +225,32 @@ where
 
         Ok(())
     }
-    
+
     /// Enter configuration mode.
     pub fn enter_config_mode(&mut self) -> Result<(), SensorError<UART::Error>> {
         self.send_command(CommandType::StartConfiguration, &[0x01, 0x00])?;
         self.in_config_mode = true;
         Ok(())
     }
-    
+
     /// Exit configuration mode.
     pub fn exit_config_mode(&mut self) -> Result<(), SensorError<UART::Error>> {
         self.send_command(CommandType::EndConfiguration, &[])?;
         self.in_config_mode = false;
         Ok(())
     }
-    
+
     /// Set maximum distance ranges and no-one duration.
-    pub fn set_distance_config(&mut self, max_moving_gate: u8, max_static_gate: u8, no_one_duration: u16) -> Result<(), SensorError<UART::Error>> {
+    pub fn set_distance_config(
+        &mut self,
+        max_moving_gate: u8,
+        max_static_gate: u8,
+        no_one_duration: u16,
+    ) -> Result<(), SensorError<UART::Error>> {
         if !self.in_config_mode {
             return Err(SensorError::NotInConfigMode);
         }
-        
+
         let mut data = [0u8; 18];
         data[2] = max_moving_gate;
         data[6] = 0x01;
@@ -250,46 +258,55 @@ where
         data[12] = 0x02;
         data[14] = (no_one_duration & 0xFF) as u8;
         data[15] = ((no_one_duration >> 8) & 0xFF) as u8;
-        
+
         self.send_command(CommandType::SetDistance, &data)?;
-        
+
         self.config.max_moving_distance_gate = max_moving_gate;
         self.config.max_static_distance_gate = max_static_gate;
         self.config.no_one_duration = no_one_duration;
-        
+
         Ok(())
     }
-    
+
     /// Set sensitivity for a specific gate.
-    pub fn set_gate_sensitivity(&mut self, gate: u8, moving_sensitivity: u8, static_sensitivity: u8) -> Result<(), SensorError<UART::Error>> {
+    pub fn set_gate_sensitivity(
+        &mut self,
+        gate: u8,
+        moving_sensitivity: u8,
+        static_sensitivity: u8,
+    ) -> Result<(), SensorError<UART::Error>> {
         if !self.in_config_mode {
             return Err(SensorError::NotInConfigMode);
         }
         if gate > 8 {
             return Err(SensorError::InvalidData);
         }
-        
+
         let mut data = [0u8; 18];
         data[2] = gate;
         data[6] = 0x01;
         data[8] = moving_sensitivity;
         data[12] = 0x02;
         data[14] = static_sensitivity;
-        
+
         self.send_command(CommandType::SetSensitivity, &data)?;
-        
+
         self.config.moving_sensitivity[gate as usize] = moving_sensitivity;
         self.config.static_sensitivity[gate as usize] = static_sensitivity;
-        
+
         Ok(())
     }
-    
+
     /// Set all gate sensitivities to the same value.
-    pub fn set_all_sensitivities(&mut self, moving_sensitivity: u8, static_sensitivity: u8) -> Result<(), SensorError<UART::Error>> {
+    pub fn set_all_sensitivities(
+        &mut self,
+        moving_sensitivity: u8,
+        static_sensitivity: u8,
+    ) -> Result<(), SensorError<UART::Error>> {
         if !self.in_config_mode {
             return Err(SensorError::NotInConfigMode);
         }
-        
+
         let mut data = [0u8; 18];
         data[2] = 0xFF;
         data[3] = 0xFF;
@@ -297,31 +314,31 @@ where
         data[8] = moving_sensitivity;
         data[12] = 0x02;
         data[14] = static_sensitivity;
-        
+
         self.send_command(CommandType::SetSensitivity, &data)?;
-        
+
         for i in 0..9 {
             self.config.moving_sensitivity[i] = moving_sensitivity;
             self.config.static_sensitivity[i] = static_sensitivity;
         }
-        
+
         Ok(())
     }
-    
+
     /// Start engineering mode.
     pub fn start_engineering_mode(&mut self) -> Result<(), SensorError<UART::Error>> {
         self.send_command(CommandType::StartEngineering, &[])?;
         self.engineering_mode = true;
         Ok(())
     }
-    
+
     /// End engineering mode.
     pub fn end_engineering_mode(&mut self) -> Result<(), SensorError<UART::Error>> {
         self.send_command(CommandType::EndEngineering, &[])?;
         self.engineering_mode = false;
         Ok(())
     }
-    
+
     /// Factory reset the device.
     pub fn factory_reset(&mut self) -> Result<(), SensorError<UART::Error>> {
         if !self.in_config_mode {
@@ -331,7 +348,7 @@ where
         self.config = Ld2410Config::default();
         Ok(())
     }
-    
+
     /// Reboot the device.
     pub fn reboot(&mut self) -> Result<(), SensorError<UART::Error>> {
         if !self.in_config_mode {
@@ -342,13 +359,13 @@ where
         self.engineering_mode = false;
         Ok(())
     }
-    
+
     /// Get firmware version.
     pub fn get_firmware_version(&mut self) -> Result<(), SensorError<UART::Error>> {
         self.send_command(CommandType::GetFirmware, &[])?;
         Ok(())
     }
-    
+
     /// Set baudrate (0-7).
     pub fn set_baudrate(&mut self, baud_idx: u8) -> Result<(), SensorError<UART::Error>> {
         if !self.in_config_mode {
@@ -360,7 +377,7 @@ where
         self.send_command(CommandType::SetBaudrate, &[baud_idx, 0x00])?;
         Ok(())
     }
-    
+
     /// Read configuration parameters from the device.
     pub fn read_parameters(&mut self) -> Result<(), SensorError<UART::Error>> {
         if !self.in_config_mode {

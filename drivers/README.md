@@ -10,12 +10,13 @@
   - Constant current
   - Constant voltage
 
-
 ## HLK-LD2410 24Ghz Human Presence Sensor
 
-https://www.hlktech.net/index.php?id=988
 https://github.com/arendst/Tasmota/blob/development/tasmota/tasmota_xsns_sensor/xsns_102_ld2410.ino
+https://www.hlktech.net/index.php?id=1094
+https://github.com/iavorvel/MyLD2410/blob/master/src/MyLD2410.h
 
+i have constant stream of bytes from serial interface - i am fetching them in 64byte chunks - i need to recognize a header and footer byte sequence and want the data inbetween - how do i do this with rust ?
 
 ### Generate documentation
 
