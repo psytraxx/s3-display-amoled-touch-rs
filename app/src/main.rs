@@ -70,7 +70,7 @@ fn main() -> ! {
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
     // Initialize delay
-    let delay = Delay::new();
+    let mut delay = Delay::new();
 
     // Initialize peripherals
     let peripherals = esp_hal::init({
@@ -95,31 +95,18 @@ fn main() -> ! {
         .with_tx(peripherals.GPIO43);
 
     // Create the LD2410 radar instance
-    let mut radar = LD2410::new(uart0);
+    let mut radar = LD2410::new(uart0, delay);
 
     let t = radar
-        .request_firmware_version(delay)
-        .expect("Failed to request firmware version");
+        .request_firmware_version()
+        .expect("Failed to request radar restart");
 
-    info!("Firmware version 1: {}", t);
+    info!("Request result: {}", t);
 
     loop {
-        match radar.read_frame() {
+        match radar.read_data_frame() {
             Ok(Some(radar_data)) => {
-                // Process radar data if needed
-                // For example:
-                if radar_data.movement_target_distance > 0 {
-                    info!(
-                        "Movement detected at {} cm",
-                        radar_data.movement_target_distance
-                    );
-                }
-                if radar_data.stationary_target_distance > 0 {
-                    info!(
-                        "Stationary target at {} cm",
-                        radar_data.stationary_target_distance
-                    );
-                }
+                info!("Radar data: {:?}", radar_data);
             }
             Ok(None) => {
                 // Engineering data or other non-target data received
@@ -128,6 +115,8 @@ fn main() -> ! {
                 error!("Error reading radar frame: {}", defmt::Debug2Format(&e));
             }
         }
+
+        delay.delay_millis(10);
     }
 
     let mut rtc = Rtc::new(peripherals.LPWR);
