@@ -97,6 +97,12 @@ fn main() -> ! {
     // Create the LD2410 radar instance
     let mut radar = LD2410::new(uart0);
 
+    let t = radar
+        .request_firmware_version(delay)
+        .expect("Failed to request firmware version");
+
+    info!("Firmware version 1: {}", t);
+
     loop {
         match radar.read_frame() {
             Ok(Some(radar_data)) => {
@@ -114,7 +120,6 @@ fn main() -> ! {
                         radar_data.stationary_target_distance
                     );
                 }
-                info!("Target status: {}", radar_data.target_status);
             }
             Ok(None) => {
                 // Engineering data or other non-target data received

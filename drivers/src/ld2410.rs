@@ -1,5 +1,6 @@
-use defmt::{error, info};
-use embedded_io::Read;
+use defmt::{error, info, warn};
+use embedded_hal::delay::DelayNs;
+use embedded_io::{Read, Write};
 
 pub struct LD2410<UART> {
     uart: UART,
@@ -25,7 +26,7 @@ pub enum LD2410Error<E> {
 
 impl<UART> LD2410<UART>
 where
-    UART: Read,
+    UART: Read + Write,
 {
     pub fn new(uart: UART) -> Self {
         Self {
@@ -101,5 +102,77 @@ where
             read += n;
         }
         Ok(())
+    }
+    fn send_command_preamble(&mut self) -> Result<(), LD2410Error<UART::Error>> {
+        self.uart
+            .write_all(&[0xFD, 0xFC, 0xFB, 0xFA])
+            .map_err(LD2410Error::Read)
+    }
+
+    fn send_command_postamble(&mut self) -> Result<(), LD2410Error<UART::Error>> {
+        self.uart
+            .write_all(&[0x04, 0x03, 0x02, 0x01])
+            .map_err(LD2410Error::Read)
+    }
+
+    fn enter_configuration_mode(&mut self) -> Result<(), LD2410Error<UART::Error>> {
+        // Example command to enter configuration mode:
+        // Command: [0x04, 0x00, 0xFF, 0x00, 0x01, 0x00]
+        self.send_command_preamble()?;
+        self.uart
+            .write_all(&[0x04, 0x00, 0xFF, 0x00, 0x01, 0x00])
+            .map_err(LD2410Error::Read)?;
+        self.send_command_postamble()?;
+        // In a real implementation, you would wait for an acknowledgment.
+        Ok(())
+    }
+
+    fn leave_configuration_mode(&mut self) -> Result<(), LD2410Error<UART::Error>> {
+        // Example command to leave configuration mode:
+        // Command: [0x02, 0x00, 0xFE, 0x00]
+        self.send_command_preamble()?;
+        self.uart
+            .write_all(&[0x02, 0x00, 0xFE, 0x00])
+            .map_err(LD2410Error::Read)?;
+        self.send_command_postamble()?;
+        Ok(())
+    }
+
+    /// Requests firmware version from the sensor.
+    /// Sends a firmware request command and polls for a response.
+    /// Returns Ok(true) if the expected ack is received, otherwise Ok(false).
+    pub fn request_firmware_version<U: DelayNs>(
+        &mut self,
+        mut delay: U,
+    ) -> Result<bool, LD2410Error<UART::Error>> {
+        self.enter_configuration_mode()?;
+        delay.delay_ms(50);
+        // Send firmware version request command:
+        // Command: [0x02, 0x00, 0xA0, 0x00]
+        self.send_command_preamble()?;
+        self.uart
+            .write_all(&[0x02, 0x00, 0xA0, 0x00])
+            .map_err(LD2410Error::Read)?;
+        self.send_command_postamble()?;
+        // Record command send time here if using a timeout mechanism
+        // Poll for response (for simplicity, a fixed number of attempts are made)
+        for _ in 0..100 {
+            delay.delay_ms(10);
+            // Try reading a frame which should contain the firmware ACK.
+            if let Ok(Some(response)) = self.read_frame() {
+                warn!(
+                    "Firmware target_status response: {:?}",
+                    response.target_status
+                );
+                // In this example, an ACK frame is assumed to have target_status == 0xA0
+                if response.target_status == 0xA0 {
+                    delay.delay_ms(50);
+                    self.leave_configuration_mode()?;
+                    return Ok(true);
+                }
+            }
+        }
+        self.leave_configuration_mode()?;
+        Ok(false)
     }
 }
