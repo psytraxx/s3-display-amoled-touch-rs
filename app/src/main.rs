@@ -106,7 +106,7 @@ fn main() -> ! {
     info!("Factory reset: {:?}", version); */
 
     let version = radar
-        .request_firmware_version()
+        .get_firmware_version()
         .expect("Failed to request radar restart");
 
     if let Some(v) = version {
@@ -114,14 +114,14 @@ fn main() -> ! {
     }
 
     let config = radar
-        .request_current_configuration()
+        .get_configuration()
         .expect("Failed to request current configuration");
 
     if let Some(c) = config {
         info!("Current configuration: {}", c);
     }
 
-    if let Ok(Some(event)) = radar.read_data_frame() {
+    if let Ok(Some(event)) = radar.get_radar_data() {
         info!("Radar data: {:?}", event);
     }
 

@@ -2,8 +2,9 @@ use alloc::vec::Vec;
 use core::convert::TryInto;
 use defmt::{debug, info, warn, Format};
 use embedded_hal::delay::DelayNs;
-use embedded_io::{Read, Write};
+use embedded_io::{Read, ReadExactError, Write};
 
+// Constants
 const LD2410_BUFFER_SIZE: usize = 256;
 
 const DATA_HEADER: [u8; 4] = [0xF4, 0xF3, 0xF2, 0xF1];
@@ -12,29 +13,7 @@ const DATA_TAIL: [u8; 4] = [0xF8, 0xF7, 0xF6, 0xF5];
 const CMD_HEADER: [u8; 4] = [0xFD, 0xFC, 0xFB, 0xFA];
 const CMD_TAIL: [u8; 4] = [0x04, 0x03, 0x02, 0x01];
 
-pub struct LD2410<UART, DELAY: DelayNs> {
-    uart: UART,
-    buf: [u8; LD2410_BUFFER_SIZE],
-    delay: DELAY,
-    config: PollingConfig,
-}
-
-pub struct PollingConfig {
-    pub max_attempts: u8,
-    pub delay_ms: u32,
-    pub timeout_ms: u32,
-}
-
-impl Default for PollingConfig {
-    fn default() -> Self {
-        Self {
-            max_attempts: 10,
-            delay_ms: 10,
-            timeout_ms: 100,
-        }
-    }
-}
-
+// Data Types
 #[derive(Debug, Clone, Copy)]
 pub struct FirmwareVersion {
     pub major: u8,
@@ -74,6 +53,27 @@ impl Format for RadarConfiguration {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct RadarData {
+    pub target_status: u8,
+    pub movement_target_distance: u16,
+    pub stationary_target_distance: u16,
+    pub detection_distance: u16,
+}
+
+impl Format for RadarData {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(
+            f,
+            "RadarData {{ status: {}, movement: {}cm, stationary: {}cm, detection: {}cm }}",
+            self.target_status,
+            self.movement_target_distance,
+            self.stationary_target_distance,
+            self.detection_distance
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum Command {
     EnterConfigMode,
     ExitConfigMode,
@@ -107,24 +107,19 @@ impl Command {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct RadarData {
-    pub target_status: u8,
-    pub movement_target_distance: u16,
-    pub stationary_target_distance: u16,
-    pub detection_distance: u16,
+pub struct PollingConfig {
+    pub max_attempts: u8,
+    pub delay_ms: u32,
+    pub timeout_ms: u32,
 }
 
-impl Format for RadarData {
-    fn format(&self, f: defmt::Formatter) {
-        defmt::write!(
-            f,
-            "RadarData {{ status: {}, movement: {}cm, stationary: {}cm, detection: {}cm }}",
-            self.target_status,
-            self.movement_target_distance,
-            self.stationary_target_distance,
-            self.detection_distance
-        )
+impl Default for PollingConfig {
+    fn default() -> Self {
+        Self {
+            max_attempts: 10,
+            delay_ms: 10,
+            timeout_ms: 100,
+        }
     }
 }
 
@@ -138,10 +133,37 @@ pub enum LD2410Error<E> {
     InvalidData,
 }
 
+// Add this implementation for embedded_io::ReadExactError
+impl<E> From<ReadExactError<E>> for LD2410Error<E> {
+    fn from(error: ReadExactError<E>) -> Self {
+        match error {
+            ReadExactError::UnexpectedEof => LD2410Error::InvalidData,
+            ReadExactError::Other(e) => LD2410Error::Read(e),
+        }
+    }
+}
+
+// Add this implementation for direct UART errors
+impl<E> From<E> for LD2410Error<E> {
+    fn from(error: E) -> Self {
+        LD2410Error::Read(error)
+    }
+}
+
+// Main driver struct
+pub struct LD2410<UART, DELAY: DelayNs> {
+    uart: UART,
+    buf: [u8; LD2410_BUFFER_SIZE],
+    delay: DELAY,
+    config: PollingConfig,
+}
+
+// Implementation
 impl<UART, DELAY: DelayNs> LD2410<UART, DELAY>
 where
     UART: Read + Write,
 {
+    // Constructor
     pub fn new(uart: UART, delay: DELAY) -> Self {
         Self {
             uart,
@@ -151,25 +173,26 @@ where
         }
     }
 
+    // Public API
     /// Reads a data frame (header, length, payload, tail) and decodes it.
-    pub fn read_data_frame(&mut self) -> Result<Option<RadarData>, LD2410Error<UART::Error>> {
+    pub fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error<UART::Error>> {
         let mut header = [0u8; 4];
-        Self::read_exact(&mut self.uart, &mut header).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut header)?;
         if header != DATA_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
-        Self::read_exact(&mut self.uart, &mut len_buf).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut len_buf)?;
         let len = u16::from_le_bytes(len_buf) as usize;
         if len > self.buf.len() {
             return Err(LD2410Error::TooLarge(len));
         }
 
-        Self::read_exact(&mut self.uart, &mut self.buf[..len]).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut self.buf[..len])?;
 
         let mut tail = [0u8; 4];
-        Self::read_exact(&mut self.uart, &mut tail).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut tail)?;
         if tail != DATA_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
@@ -177,6 +200,101 @@ where
         Ok(self.decode_data_frame(&self.buf[..len]))
     }
 
+    pub fn get_firmware_version(
+        &mut self,
+    ) -> Result<Option<FirmwareVersion>, LD2410Error<UART::Error>> {
+        self.with_configuration_mode(|this| this.execute_command(Command::RequestFirmware))
+            .map(|opt_data| {
+                opt_data.and_then(|data| {
+                    if data.len() < 8 {
+                        return None;
+                    }
+
+                    // Using try_into with proper error handling
+                    let bugfix_bytes = match data.get(4..8) {
+                        Some(bytes) => match bytes.try_into() {
+                            Ok(array) => array,
+                            Err(_) => return None,
+                        },
+                        None => return None,
+                    };
+
+                    Some(FirmwareVersion {
+                        major: data[3],
+                        minor: data[2],
+                        bugfix: u32::from_le_bytes(bugfix_bytes),
+                    })
+                })
+            })
+    }
+
+    pub fn request_restart(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
+        self.with_configuration_mode(|this| {
+            let res = this.execute_command(Command::RequestRestart)?;
+            if res.is_some() {
+                info!("Restart request successful");
+                this.delay.delay_ms(50);
+            }
+            Ok(res)
+        })
+        .map(|opt| opt.is_some())
+    }
+
+    pub fn request_factory_reset(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
+        self.with_configuration_mode(|this| {
+            let res = this.execute_command(Command::RequestFactoryReset)?;
+            if res.is_some() {
+                info!("Factory reset request successful");
+                this.delay.delay_ms(50);
+            } else {
+                warn!("Factory reset request failed");
+            }
+            Ok(res)
+        })
+        .map(|opt| opt.is_some())
+    }
+
+    pub fn get_configuration(
+        &mut self,
+    ) -> Result<Option<RadarConfiguration>, LD2410Error<UART::Error>> {
+        self.with_configuration_mode(|this| this.execute_command(Command::RequestCurrentConfig))
+            .map(|opt_data| {
+                opt_data.and_then(|data| {
+                    // Safe bounds checking
+                    if data.len() < 24 {
+                        return None;
+                    }
+
+                    // Safely convert slices to arrays
+                    let motion_sensitivity = match data.get(4..13).and_then(|s| s.try_into().ok()) {
+                        Some(array) => array,
+                        None => return None,
+                    };
+
+                    let stationary_sensitivity =
+                        match data.get(13..22).and_then(|s| s.try_into().ok()) {
+                            Some(array) => array,
+                            None => return None,
+                        };
+
+                    let idle_time_bytes = match data.get(22..24).and_then(|s| s.try_into().ok()) {
+                        Some(array) => array,
+                        None => return None,
+                    };
+
+                    Some(RadarConfiguration {
+                        max_gate: data[1],
+                        max_moving_gate: data[2],
+                        max_stationary_gate: data[3],
+                        motion_sensitivity,
+                        stationary_sensitivity,
+                        sensor_idle_time: u16::from_le_bytes(idle_time_bytes),
+                    })
+                })
+            })
+    }
+
+    // Private helper methods
     fn decode_data_frame(&self, buf: &[u8]) -> Option<RadarData> {
         if buf.len() < 13 || buf[1] != 0xAA || buf[11] != 0x55 || buf[12] != 0x00 {
             return None;
@@ -194,40 +312,27 @@ where
         })
     }
 
-    fn read_exact<T: Read>(uart: &mut T, buf: &mut [u8]) -> Result<(), T::Error> {
-        let mut read = 0;
-        while read < buf.len() {
-            let n = uart.read(&mut buf[read..])?;
-            if n == 0 {
-                continue;
-            }
-            read += n;
-        }
-        Ok(())
-    }
-
-    /// Reads a command ACK frame and returns a slice of the payload if the command succeeded.
     fn read_command_frame(
         &mut self,
         expected_ack: u8,
     ) -> Result<Option<&[u8]>, LD2410Error<UART::Error>> {
         let mut header = [0u8; 4];
-        Self::read_exact(&mut self.uart, &mut header).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut header)?;
         if header != CMD_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
-        Self::read_exact(&mut self.uart, &mut len_buf).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut len_buf)?;
         let len = u16::from_le_bytes(len_buf) as usize;
         if len > self.buf.len() {
             return Err(LD2410Error::TooLarge(len));
         }
 
-        Self::read_exact(&mut self.uart, &mut self.buf[..len]).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut self.buf[..len])?;
 
         let mut tail = [0u8; 4];
-        Self::read_exact(&mut self.uart, &mut tail).map_err(LD2410Error::Read)?;
+        self.uart.read_exact(&mut tail)?;
         if tail != CMD_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
@@ -242,27 +347,13 @@ where
         Ok(None)
     }
 
-    fn send_command_preamble(&mut self) -> Result<(), LD2410Error<UART::Error>> {
-        debug!("Sending command preamble");
-        self.uart.write_all(&CMD_HEADER).map_err(LD2410Error::Read)
-    }
-
-    fn send_command_postamble(&mut self) -> Result<(), LD2410Error<UART::Error>> {
-        debug!("Sending command postamble");
-        self.uart.write_all(&CMD_TAIL).map_err(LD2410Error::Read)
-    }
-
-    /// Executes a command by sending the preamble, the command payload, the postamble,
-    /// and then waiting for a matching ACK within the configured timeout.
     fn execute_command(
         &mut self,
         command: Command,
     ) -> Result<Option<Vec<u8>>, LD2410Error<UART::Error>> {
-        self.send_command_preamble()?;
-        self.uart
-            .write_all(command.payload())
-            .map_err(LD2410Error::Write)?;
-        self.send_command_postamble()?;
+        self.uart.write_all(&CMD_HEADER)?;
+        self.uart.write_all(command.payload())?;
+        self.uart.write_all(&CMD_TAIL)?;
 
         let expected_ack = command.expected_ack();
         let mut elapsed_ms = 0;
@@ -313,65 +404,5 @@ where
             warn!("Failed to enter configuration mode");
             Ok(None)
         }
-    }
-
-    pub fn request_firmware_version(
-        &mut self,
-    ) -> Result<Option<FirmwareVersion>, LD2410Error<UART::Error>> {
-        self.with_configuration_mode(|this| this.execute_command(Command::RequestFirmware))
-            .map(|opt_data| {
-                opt_data.and_then(|data| {
-                    if data.len() < 8 {
-                        return None;
-                    }
-                    Some(FirmwareVersion {
-                        major: data[3],
-                        minor: data[2],
-                        bugfix: u32::from_le_bytes(data[4..8].try_into().unwrap()),
-                    })
-                })
-            })
-    }
-
-    pub fn request_restart(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
-        self.with_configuration_mode(|this| {
-            let res = this.execute_command(Command::RequestRestart)?;
-            if res.is_some() {
-                info!("Restart request successful");
-                this.delay.delay_ms(50);
-            }
-            Ok(res)
-        })
-        .map(|opt| opt.is_some())
-    }
-
-    pub fn request_factory_reset(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
-        self.with_configuration_mode(|this| {
-            let res = this.execute_command(Command::RequestFactoryReset)?;
-            if res.is_some() {
-                info!("Factory reset request successful");
-                this.delay.delay_ms(50);
-            } else {
-                warn!("Factory reset request failed");
-            }
-            Ok(res)
-        })
-        .map(|opt| opt.is_some())
-    }
-
-    pub fn request_current_configuration(
-        &mut self,
-    ) -> Result<Option<RadarConfiguration>, LD2410Error<UART::Error>> {
-        self.with_configuration_mode(|this| this.execute_command(Command::RequestCurrentConfig))
-            .map(|opt_data| {
-                opt_data.map(|data| RadarConfiguration {
-                    max_gate: data[1],
-                    max_moving_gate: data[2],
-                    max_stationary_gate: data[3],
-                    motion_sensitivity: data[4..13].try_into().unwrap(),
-                    stationary_sensitivity: data[13..22].try_into().unwrap(),
-                    sensor_idle_time: u16::from_le_bytes(data[22..24].try_into().unwrap()),
-                })
-            })
     }
 }
