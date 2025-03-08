@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(async_closure)]
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
