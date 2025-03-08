@@ -97,11 +97,13 @@ fn main() -> ! {
     // Create the LD2410 radar instance
     let mut radar = LD2410::new(uart0, delay);
 
-    let t = radar
+    let version = radar
         .request_firmware_version()
         .expect("Failed to request radar restart");
 
-    info!("Request result: {}", t);
+    if let Some(v) = version {
+        info!("Firmware version: {}", v);
+    }
 
     loop {
         match radar.read_data_frame() {
