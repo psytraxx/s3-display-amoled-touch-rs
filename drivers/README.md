@@ -10,14 +10,39 @@
   - Constant current
   - Constant voltage
 
-## HLK-LD2410 24Ghz Human Presence Sensor
+## HLK-LD2410 24Ghz Radar Human Presence Sensor
 
-https://github.com/arendst/Tasmota/blob/development/tasmota/tasmota_xsns_sensor/xsns_102_ld2410.ino
-https://www.hlktech.net/index.php?id=1094
-https://github.com/iavorvel/MyLD2410/blob/master/src/MyLD2410.h
+This Rust driver module provides support for the Hi-Link LD2410 24GHz FMCW radar sensor. It abstracts the low-level UART
+communication with the sensor and implements the command protocol used for configuration and data retrieval.
 
-i have constant stream of bytes from serial interface - i am fetching them in 64byte chunks - i need to recognize a header and footer byte sequence and want the data inbetween - how do i do this with rust ?
+### Features
+
+- **Command-based Interaction:**  
+  The driver supports standard commands to enter and exit configuration mode, request firmware version, restart the sensor, perform a factory reset, and query the current sensor configuration.
+
+- **Frame Parsing:**  
+  Data and command frames are parsed based on defined headers and tails. The driver validates the frames and decodes them into high-level structures like `RadarData` and `RadarConfiguration`.
+
+- **Error Handling:**  
+  Robust error handling is provided via the `LD2410Error` enum, ensuring that unexpected data or protocol mismatches are caught.
+
+- **Configurable Polling:**  
+  The driver allows adjustment of timeout values and polling delays through a `PollingConfig` struct.
+
+### Usage Example
+
+```rust
+// Create an instance of the driver with your UART and delay implementations.
+let mut radar = LD2410::new(uart, delay);
+
+// Request firmware version.
+match radar.request_firmware_version() {
+    Ok(Some(firmware)) => defmt::info!("Firmware version: {}", firmware),
+    Ok(None) => defmt::warn!("No firmware information received."),
+    Err(e) => defmt::error!("Failed to retrieve firmware version: {:?}", e),
+}
+```
 
 ### Generate documentation
 
-    cargo doc -p bq25896x --no-deps  --open
+    cargo doc -p drivers --no-deps  --open
