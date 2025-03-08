@@ -10,6 +10,7 @@ use defmt::{error, info};
 use draw_buffer::DrawBuffer;
 use drivers::bq25896::{ChargeStatus, PmuSensorError, BQ25896};
 use drivers::cst816s::CST816S;
+use drivers::ld2410::LD2410;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::AtomicDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
@@ -27,6 +28,7 @@ use esp_hal::spi::Mode;
 use esp_hal::time::now;
 use esp_hal::time::RateExtU32;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::uart::{Config as UartConfig, Uart};
 use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, main};
 use mipidsi::interface::SpiInterface;
@@ -55,6 +57,8 @@ const PMU_CHARGE_TARGET_VOLTAGE: u16 = 4208;
 const PMU_PRECHARGE_CURRENT: u16 = 128;
 /// Constant charging current in mA for BQ25896
 const PMU_CONSTANT_CHARGE_CURRENT: u16 = 1536;
+// fifo_full_threshold (RX)
+const READ_BUF_SIZE: u16 = 64;
 
 // credits to
 // https://github.com/slint-ui/slint/blob/master/examples/mcu-board-support/esp32_s3_box.rs and
@@ -75,6 +79,52 @@ fn main() -> ! {
         config
     });
 
+    // Initialize PSRAM allocator
+    psram_allocator!(peripherals.PSRAM, esp_hal::psram);
+
+    let config = UartConfig::default()
+        .with_baudrate(256000)
+        .with_rx_fifo_full_threshold(READ_BUF_SIZE)
+        .with_parity(esp_hal::uart::Parity::None)
+        .with_stop_bits(esp_hal::uart::StopBits::_1);
+
+    let uart0 = Uart::new(peripherals.UART0, config).expect("Failed to initialize UART0");
+
+    let uart0 = uart0
+        .with_rx(peripherals.GPIO44)
+        .with_tx(peripherals.GPIO43);
+
+    // Create the LD2410 radar instance
+    let mut radar = LD2410::new(uart0, delay);
+
+    /*
+
+    let version = radar
+        .request_factory_reset()
+        .expect("Failed to request factory reset");
+
+    info!("Factory reset: {:?}", version); */
+
+    let version = radar
+        .request_firmware_version()
+        .expect("Failed to request radar restart");
+
+    if let Some(v) = version {
+        info!("Firmware version: {}", v);
+    }
+
+    let config = radar
+        .request_current_configuration()
+        .expect("Failed to request current configuration");
+
+    if let Some(c) = config {
+        info!("Current configuration: {}", c);
+    }
+
+    if let Ok(Some(event)) = radar.read_data_frame() {
+        info!("Radar data: {:?}", event);
+    }
+
     let mut rtc = Rtc::new(peripherals.LPWR);
     rtc.rwdt.disable();
 
@@ -82,9 +132,6 @@ fn main() -> ! {
     timer_group0.wdt.disable();
     let mut timer_group1 = TimerGroup::new(peripherals.TIMG1);
     timer_group1.wdt.disable();
-
-    // Initialize PSRAM allocator
-    psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
     // Initialize I2C bus
     let i2c = I2c::new(peripherals.I2C0, esp_hal::i2c::master::Config::default())
@@ -233,7 +280,7 @@ fn main() -> ! {
 
         // Read touch events
         if let Some(touch_event) = touchpad.read_touch(true).expect("read touch failed") {
-            info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
+            //info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
             let position = LogicalPosition::new(
                 DISPLAY_WIDTH as f32 - touch_event.x as f32,
                 DISPLAY_HEIGHT as f32 - touch_event.y as f32,
