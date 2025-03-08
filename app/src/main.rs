@@ -97,12 +97,30 @@ fn main() -> ! {
     // Create the LD2410 radar instance
     let mut radar = LD2410::new(uart0, delay);
 
+    /*
+
+    let version = radar
+        .request_factory_reset()
+        .expect("Failed to request factory reset");
+
+    info!("Factory reset: {:?}", version); */
+
     let version = radar
         .request_firmware_version()
         .expect("Failed to request radar restart");
 
     if let Some(v) = version {
         info!("Firmware version: {}", v);
+    }
+
+    let config = radar
+        .request_current_configuration()
+        .expect("Failed to request current configuration");
+
+    if let Some(c) = config {
+        info!("Current configuration: {}", c);
+        info!("Stationary: {:?}", c.stationary_sensitivity);
+        info!("Motion: {:?}", c.motion_sensitivity);
     }
 
     loop {

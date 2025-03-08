@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use defmt::{debug, error, info, warn, Format};
 use embedded_hal::delay::DelayNs;
 use embedded_io::{Read, Write};
@@ -41,11 +42,36 @@ impl Format for FirmwareVersion {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct RadarConfiguration {
+    pub max_gate: u8,
+    pub max_moving_gate: u8,
+    pub max_stationary_gate: u8,
+    pub motion_sensitivity: [u8; 9],
+    pub stationary_sensitivity: [u8; 9],
+    pub sensor_idle_time: u16,
+}
+
+impl Format for RadarConfiguration {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(
+            f,
+            "RadarConfiguration {{ max_gate: {}, max_moving_gate: {}, max_stationary_gate: {}, idle_time: {}s }}",
+            self.max_gate,
+            self.max_moving_gate,
+            self.max_stationary_gate,
+            self.sensor_idle_time
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum Command {
     EnterConfigMode,
     ExitConfigMode,
     RequestFirmware,
     RequestRestart,
+    RequestFactoryReset,
+    RequestCurrentConfig,
 }
 
 impl Command {
@@ -55,6 +81,8 @@ impl Command {
             Command::ExitConfigMode => &[0x02, 0x00, 0xFE, 0x00],
             Command::RequestFirmware => &[0x02, 0x00, 0xA0, 0x00],
             Command::RequestRestart => &[0x02, 0x00, 0xA3, 0x00],
+            Command::RequestFactoryReset => &[0x02, 0x00, 0xA2, 0x00],
+            Command::RequestCurrentConfig => &[0x02, 0x00, 0x61, 0x00],
         }
     }
 
@@ -64,6 +92,8 @@ impl Command {
             Command::ExitConfigMode => 0xFE,
             Command::RequestFirmware => 0xA0,
             Command::RequestRestart => 0xA3,
+            Command::RequestFactoryReset => 0xA2,
+            Command::RequestCurrentConfig => 0x61,
         }
     }
 }
@@ -138,7 +168,6 @@ where
     }
 
     fn decode_data_frame(&self, buf: &[u8]) -> Option<RadarData> {
-        // We no longer check the data type byte; just verify the magic bytes at expected positions.
         if buf.len() >= 13 && buf[1] == 0xAA && buf[11] == 0x55 && buf[12] == 0x00 {
             let target_status = buf[2];
             let movement_target_distance = u16::from_le_bytes([buf[3], buf[4]]);
@@ -168,6 +197,46 @@ where
         Ok(())
     }
 
+    /// Reads an ACK frame from the UART.
+    /// Expects a header [0xFD, 0xFC, 0xFB, 0xFA] and tail [0x04, 0x03, 0x02, 0x01].
+    /// If both the ACK code and success indicator match, returns remaining payload.
+    fn read_command_frame(
+        &mut self,
+        expected_ack: u8,
+    ) -> Result<Option<&[u8]>, LD2410Error<UART::Error>> {
+        let mut header = [0u8; 4];
+        Self::read_exact(&mut self.uart, &mut header).map_err(LD2410Error::Read)?;
+
+        if header != [0xFD, 0xFC, 0xFB, 0xFA] {
+            return Err(LD2410Error::InvalidHeader);
+        }
+
+        let mut len_buf = [0u8; 2];
+        Self::read_exact(&mut self.uart, &mut len_buf).map_err(LD2410Error::Read)?;
+        let len = u16::from_le_bytes(len_buf) as usize;
+
+        if len > self.buf.len() {
+            return Err(LD2410Error::TooLarge(len));
+        }
+
+        Self::read_exact(&mut self.uart, &mut self.buf[..len]).map_err(LD2410Error::Read)?;
+
+        let mut tail = [0u8; 4];
+        Self::read_exact(&mut self.uart, &mut tail).map_err(LD2410Error::Read)?;
+        if tail != [0x04, 0x03, 0x02, 0x01] {
+            return Err(LD2410Error::InvalidTail);
+        }
+
+        if len >= 4 {
+            let ack_code = self.buf[0];
+            let command_success = self.buf[2] == 0x00 && self.buf[3] == 0x00;
+            if command_success && ack_code == expected_ack {
+                return Ok(Some(&self.buf[4..len]));
+            }
+        }
+        Ok(None)
+    }
+
     fn send_command_preamble(&mut self) -> Result<(), LD2410Error<UART::Error>> {
         debug!("Sending command preamble");
         self.uart
@@ -182,8 +251,11 @@ where
             .map_err(LD2410Error::Read)
     }
 
-    // Generic command execution method
-    fn execute_command(&mut self, command: Command) -> Result<bool, LD2410Error<UART::Error>> {
+    // Generic command execution method.
+    fn execute_command(
+        &mut self,
+        command: Command,
+    ) -> Result<Option<Vec<u8>>, LD2410Error<UART::Error>> {
         self.send_command_preamble()?;
         self.uart
             .write_all(command.payload())
@@ -192,136 +264,125 @@ where
 
         let expected_ack = command.expected_ack();
         let mut elapsed_ms = 0;
-
         while elapsed_ms < self.config.timeout_ms {
             self.delay.delay_ms(self.config.delay_ms);
             elapsed_ms += self.config.delay_ms;
 
-            if let Ok(Some(response)) = self.read_command_frame() {
-                if response == expected_ack {
-                    return Ok(true);
-                }
+            if let Ok(Some(data)) = self.read_command_frame(expected_ack) {
+                return Ok(Some(data.to_vec()));
             }
         }
-
-        Ok(false) // Timeout without matching ACK
+        Ok(None) // Timeout without matching ACK
     }
 
     fn enter_configuration_mode(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
         let result = self.execute_command(Command::EnterConfigMode)?;
-        if result {
+        let entered = result.is_some();
+        if entered {
             debug!("Entered configuration mode");
         } else {
             warn!("Failed to enter configuration mode");
         }
-        Ok(result)
+        Ok(entered)
     }
 
     fn leave_configuration_mode(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
         let result = self.execute_command(Command::ExitConfigMode)?;
-        if result {
+        let left = result.is_some();
+        if left {
             debug!("Left configuration mode");
+        } else {
+            warn!("Failed to leave configuration mode");
         }
-        Ok(result)
+        Ok(left)
+    }
+
+    /// Helper method to reduce repetitive configuration mode boilerplate.
+    fn with_configuration_mode<F, T>(
+        &mut self,
+        op: F,
+    ) -> Result<Option<T>, LD2410Error<UART::Error>>
+    where
+        F: FnOnce(&mut Self) -> Result<Option<T>, LD2410Error<UART::Error>>,
+    {
+        if self.enter_configuration_mode()? {
+            self.delay.delay_ms(50);
+            let res = op(self)?;
+            self.leave_configuration_mode()?;
+            Ok(res)
+        } else {
+            warn!("Failed to enter configuration mode");
+            Ok(None)
+        }
     }
 
     /// Requests firmware version from the sensor.
-    /// Sends a firmware version request command and polls for a response.
-    /// Returns Ok(Some(version_string)) if the expected ACK is received and version data is parsed, otherwise Ok(None).
     pub fn request_firmware_version(
         &mut self,
     ) -> Result<Option<FirmwareVersion>, LD2410Error<UART::Error>> {
-        if let Ok(true) = self.enter_configuration_mode() {
-            self.delay.delay_ms(50);
-
-            let result = self.execute_command(Command::RequestFirmware)?;
-            if result {
-                self.delay.delay_ms(50);
-                // Parse version information from the buffer
-                if self.buf.len() >= 18 {
-                    let firmware_major_version = self.buf[7];
-                    let firmware_minor_version = self.buf[6];
-                    let firmware_bugfix_version = self.buf[8] as u32
-                        | ((self.buf[9] as u32) << 8)
-                        | ((self.buf[10] as u32) << 16)
-                        | ((self.buf[11] as u32) << 24);
-
-                    let version = FirmwareVersion {
+        self.with_configuration_mode(|this| this.execute_command(Command::RequestFirmware))
+            .map(|opt_data| {
+                opt_data.and_then(|data| {
+                    if data.len() < 8 {
+                        return None;
+                    }
+                    let firmware_major_version = data[3];
+                    let firmware_minor_version = data[2];
+                    let firmware_bugfix_version = data[4] as u32
+                        | ((data[5] as u32) << 8)
+                        | ((data[6] as u32) << 16)
+                        | ((data[7] as u32) << 24);
+                    Some(FirmwareVersion {
                         major: firmware_major_version,
                         minor: firmware_minor_version,
                         bugfix: firmware_bugfix_version,
-                    };
-
-                    self.leave_configuration_mode()?;
-                    return Ok(Some(version));
-                }
-            }
-
-            self.leave_configuration_mode()?;
-        }
-
-        warn!("Failed to request firmware version");
-        Ok(None)
+                    })
+                })
+            })
     }
 
     /// Requests the radar module to restart.
-    /// Sends a restart request command and polls for a response.
-    /// Returns Ok(true) if the expected ACK is received, otherwise Ok(false).
     pub fn request_restart(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
-        if let Ok(true) = self.enter_configuration_mode() {
-            self.delay.delay_ms(50);
-
-            let result = self.execute_command(Command::RequestRestart)?;
-            if result {
+        self.with_configuration_mode(|this| {
+            let res = this.execute_command(Command::RequestRestart)?;
+            if res.is_some() {
                 info!("Restart request successful");
-                self.delay.delay_ms(50);
+                this.delay.delay_ms(50);
             }
-
-            self.leave_configuration_mode()?;
-            return Ok(result);
-        }
-
-        Ok(false)
+            Ok(res)
+        })
+        .map(|opt| opt.is_some())
     }
 
-    /// Reads an ACK frame from the UART.
-    /// This function expects the ACK frame header [0xFD, 0xFC, 0xFB, 0xFA] and tail [0x04, 0x03, 0x02, 0x01].
-    /// If the frame is successfully read and the command was successful (bytes 2 and 3 are zero),
-    /// the ACK code (byte 0 of the payload) is returned.
-    fn read_command_frame(&mut self) -> Result<Option<u8>, LD2410Error<UART::Error>> {
-        let mut header = [0u8; 4];
-        Self::read_exact(&mut self.uart, &mut header).map_err(LD2410Error::Read)?;
-
-        // ACK frame header
-        if header != [0xFD, 0xFC, 0xFB, 0xFA] {
-            return Err(LD2410Error::InvalidHeader);
-        }
-
-        let mut len_buf = [0u8; 2];
-        Self::read_exact(&mut self.uart, &mut len_buf).map_err(LD2410Error::Read)?;
-        let len = u16::from_le_bytes(len_buf) as usize;
-        if len > self.buf.len() {
-            return Err(LD2410Error::TooLarge(len));
-        }
-
-        // Read the ACK frame payload into self.buf
-        Self::read_exact(&mut self.uart, &mut self.buf[..len]).map_err(LD2410Error::Read)?;
-
-        let mut tail = [0u8; 4];
-        Self::read_exact(&mut self.uart, &mut tail).map_err(LD2410Error::Read)?;
-        if tail != [0x04, 0x03, 0x02, 0x01] {
-            return Err(LD2410Error::InvalidTail);
-        }
-
-        // Parse the ACK frame. Here we assume a valid ACK frame has at least 4 bytes,
-        // where byte 0 is the ACK code and bytes 2 and 3 indicate success.
-        if len >= 4 {
-            let ack_code = self.buf[0];
-            let command_success = self.buf[2] == 0x00 && self.buf[3] == 0x00;
-            if command_success {
-                return Ok(Some(ack_code));
+    /// Requests the radar module to perform a factory reset.
+    pub fn request_factory_reset(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
+        self.with_configuration_mode(|this| {
+            let res = this.execute_command(Command::RequestFactoryReset)?;
+            if res.is_some() {
+                info!("Factory reset request successful");
+                this.delay.delay_ms(50);
+            } else {
+                warn!("Factory reset request failed");
             }
-        }
-        Ok(None)
+            Ok(res)
+        })
+        .map(|opt| opt.is_some())
+    }
+
+    /// Requests the current configuration from the sensor.
+    pub fn request_current_configuration(
+        &mut self,
+    ) -> Result<Option<RadarConfiguration>, LD2410Error<UART::Error>> {
+        self.with_configuration_mode(|this| this.execute_command(Command::RequestCurrentConfig))
+            .map(|opt_data| {
+                opt_data.map(|data| RadarConfiguration {
+                    max_gate: data[1],
+                    max_moving_gate: data[2],
+                    max_stationary_gate: data[3],
+                    motion_sensitivity: data[4..13].try_into().unwrap(),
+                    stationary_sensitivity: data[13..22].try_into().unwrap(),
+                    sensor_idle_time: u16::from_le_bytes([data[22], data[23]]),
+                })
+            })
     }
 }
