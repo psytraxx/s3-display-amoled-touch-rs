@@ -1,9 +1,16 @@
 use alloc::vec::Vec;
+use core::convert::TryInto;
 use defmt::{debug, error, info, warn, Format};
 use embedded_hal::delay::DelayNs;
 use embedded_io::{Read, Write};
 
 const LD2410_BUFFER_SIZE: usize = 256;
+
+const DATA_HEADER: [u8; 4] = [0xF4, 0xF3, 0xF2, 0xF1];
+const DATA_TAIL: [u8; 4] = [0xF8, 0xF7, 0xF6, 0xF5];
+
+const CMD_HEADER: [u8; 4] = [0xFD, 0xFC, 0xFB, 0xFA];
+const CMD_TAIL: [u8; 4] = [0x04, 0x03, 0x02, 0x01];
 
 pub struct LD2410<UART, DELAY: DelayNs> {
     uart: UART,
@@ -142,10 +149,11 @@ where
         }
     }
 
+    /// Reads a data frame (header, length, payload, tail) and decodes it.
     pub fn read_data_frame(&mut self) -> Result<Option<RadarData>, LD2410Error<UART::Error>> {
         let mut header = [0u8; 4];
         Self::read_exact(&mut self.uart, &mut header).map_err(LD2410Error::Read)?;
-        if header != [0xF4, 0xF3, 0xF2, 0xF1] {
+        if header != DATA_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
@@ -160,7 +168,7 @@ where
 
         let mut tail = [0u8; 4];
         Self::read_exact(&mut self.uart, &mut tail).map_err(LD2410Error::Read)?;
-        if tail != [0xF8, 0xF7, 0xF6, 0xF5] {
+        if tail != DATA_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
 
@@ -169,15 +177,11 @@ where
 
     fn decode_data_frame(&self, buf: &[u8]) -> Option<RadarData> {
         if buf.len() >= 13 && buf[1] == 0xAA && buf[11] == 0x55 && buf[12] == 0x00 {
-            let target_status = buf[2];
-            let movement_target_distance = u16::from_le_bytes([buf[3], buf[4]]);
-            let stationary_target_distance = u16::from_le_bytes([buf[6], buf[7]]);
-            let detection_distance = u16::from_le_bytes([buf[9], buf[10]]);
             Some(RadarData {
-                target_status,
-                movement_target_distance,
-                stationary_target_distance,
-                detection_distance,
+                target_status: buf[2],
+                movement_target_distance: u16::from_le_bytes(buf[3..5].try_into().unwrap()),
+                stationary_target_distance: u16::from_le_bytes(buf[6..8].try_into().unwrap()),
+                detection_distance: u16::from_le_bytes(buf[9..11].try_into().unwrap()),
             })
         } else {
             error!("Invalid data format");
@@ -197,24 +201,20 @@ where
         Ok(())
     }
 
-    /// Reads an ACK frame from the UART.
-    /// Expects a header [0xFD, 0xFC, 0xFB, 0xFA] and tail [0x04, 0x03, 0x02, 0x01].
-    /// If both the ACK code and success indicator match, returns remaining payload.
+    /// Reads a command ACK frame and returns a slice of the payload if the command succeeded.
     fn read_command_frame(
         &mut self,
         expected_ack: u8,
     ) -> Result<Option<&[u8]>, LD2410Error<UART::Error>> {
         let mut header = [0u8; 4];
         Self::read_exact(&mut self.uart, &mut header).map_err(LD2410Error::Read)?;
-
-        if header != [0xFD, 0xFC, 0xFB, 0xFA] {
+        if header != CMD_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
         Self::read_exact(&mut self.uart, &mut len_buf).map_err(LD2410Error::Read)?;
         let len = u16::from_le_bytes(len_buf) as usize;
-
         if len > self.buf.len() {
             return Err(LD2410Error::TooLarge(len));
         }
@@ -223,7 +223,7 @@ where
 
         let mut tail = [0u8; 4];
         Self::read_exact(&mut self.uart, &mut tail).map_err(LD2410Error::Read)?;
-        if tail != [0x04, 0x03, 0x02, 0x01] {
+        if tail != CMD_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
 
@@ -239,19 +239,16 @@ where
 
     fn send_command_preamble(&mut self) -> Result<(), LD2410Error<UART::Error>> {
         debug!("Sending command preamble");
-        self.uart
-            .write_all(&[0xFD, 0xFC, 0xFB, 0xFA])
-            .map_err(LD2410Error::Read)
+        self.uart.write_all(&CMD_HEADER).map_err(LD2410Error::Read)
     }
 
     fn send_command_postamble(&mut self) -> Result<(), LD2410Error<UART::Error>> {
         debug!("Sending command postamble");
-        self.uart
-            .write_all(&[0x04, 0x03, 0x02, 0x01])
-            .map_err(LD2410Error::Read)
+        self.uart.write_all(&CMD_TAIL).map_err(LD2410Error::Read)
     }
 
-    // Generic command execution method.
+    /// Executes a command by sending the preamble, the command payload, the postamble,
+    /// and then waiting for a matching ACK within the configured timeout.
     fn execute_command(
         &mut self,
         command: Command,
@@ -267,17 +264,15 @@ where
         while elapsed_ms < self.config.timeout_ms {
             self.delay.delay_ms(self.config.delay_ms);
             elapsed_ms += self.config.delay_ms;
-
             if let Ok(Some(data)) = self.read_command_frame(expected_ack) {
                 return Ok(Some(data.to_vec()));
             }
         }
-        Ok(None) // Timeout without matching ACK
+        Ok(None)
     }
 
     fn enter_configuration_mode(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
-        let result = self.execute_command(Command::EnterConfigMode)?;
-        let entered = result.is_some();
+        let entered = self.execute_command(Command::EnterConfigMode)?.is_some();
         if entered {
             debug!("Entered configuration mode");
         } else {
@@ -287,8 +282,7 @@ where
     }
 
     fn leave_configuration_mode(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
-        let result = self.execute_command(Command::ExitConfigMode)?;
-        let left = result.is_some();
+        let left = self.execute_command(Command::ExitConfigMode)?.is_some();
         if left {
             debug!("Left configuration mode");
         } else {
@@ -297,7 +291,7 @@ where
         Ok(left)
     }
 
-    /// Helper method to reduce repetitive configuration mode boilerplate.
+    /// Helper to wrap an operation inside configuration mode.
     fn with_configuration_mode<F, T>(
         &mut self,
         op: F,
@@ -316,7 +310,6 @@ where
         }
     }
 
-    /// Requests firmware version from the sensor.
     pub fn request_firmware_version(
         &mut self,
     ) -> Result<Option<FirmwareVersion>, LD2410Error<UART::Error>> {
@@ -326,22 +319,15 @@ where
                     if data.len() < 8 {
                         return None;
                     }
-                    let firmware_major_version = data[3];
-                    let firmware_minor_version = data[2];
-                    let firmware_bugfix_version = data[4] as u32
-                        | ((data[5] as u32) << 8)
-                        | ((data[6] as u32) << 16)
-                        | ((data[7] as u32) << 24);
                     Some(FirmwareVersion {
-                        major: firmware_major_version,
-                        minor: firmware_minor_version,
-                        bugfix: firmware_bugfix_version,
+                        major: data[3],
+                        minor: data[2],
+                        bugfix: u32::from_le_bytes(data[4..8].try_into().unwrap()),
                     })
                 })
             })
     }
 
-    /// Requests the radar module to restart.
     pub fn request_restart(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
         self.with_configuration_mode(|this| {
             let res = this.execute_command(Command::RequestRestart)?;
@@ -354,7 +340,6 @@ where
         .map(|opt| opt.is_some())
     }
 
-    /// Requests the radar module to perform a factory reset.
     pub fn request_factory_reset(&mut self) -> Result<bool, LD2410Error<UART::Error>> {
         self.with_configuration_mode(|this| {
             let res = this.execute_command(Command::RequestFactoryReset)?;
@@ -369,7 +354,6 @@ where
         .map(|opt| opt.is_some())
     }
 
-    /// Requests the current configuration from the sensor.
     pub fn request_current_configuration(
         &mut self,
     ) -> Result<Option<RadarConfiguration>, LD2410Error<UART::Error>> {
@@ -381,7 +365,7 @@ where
                     max_stationary_gate: data[3],
                     motion_sensitivity: data[4..13].try_into().unwrap(),
                     stationary_sensitivity: data[13..22].try_into().unwrap(),
-                    sensor_idle_time: u16::from_le_bytes([data[22], data[23]]),
+                    sensor_idle_time: u16::from_le_bytes(data[22..24].try_into().unwrap()),
                 })
             })
     }
