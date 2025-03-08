@@ -119,24 +119,10 @@ fn main() -> ! {
 
     if let Some(c) = config {
         info!("Current configuration: {}", c);
-        info!("Stationary: {:?}", c.stationary_sensitivity);
-        info!("Motion: {:?}", c.motion_sensitivity);
     }
 
-    loop {
-        match radar.read_data_frame() {
-            Ok(Some(radar_data)) => {
-                info!("Radar data: {:?}", radar_data);
-            }
-            Ok(None) => {
-                // Engineering data or other non-target data received
-            }
-            Err(e) => {
-                error!("Error reading radar frame: {}", defmt::Debug2Format(&e));
-            }
-        }
-
-        delay.delay_millis(10);
+    if let Ok(Some(event)) = radar.read_data_frame() {
+        info!("Radar data: {:?}", event);
     }
 
     let mut rtc = Rtc::new(peripherals.LPWR);

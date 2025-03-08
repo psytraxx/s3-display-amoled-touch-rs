@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use core::convert::TryInto;
-use defmt::{debug, error, info, warn, Format};
+use defmt::{debug, info, warn, Format};
 use embedded_hal::delay::DelayNs;
 use embedded_io::{Read, Write};
 
@@ -62,12 +62,14 @@ impl Format for RadarConfiguration {
     fn format(&self, f: defmt::Formatter) {
         defmt::write!(
             f,
-            "RadarConfiguration {{ max_gate: {}, max_moving_gate: {}, max_stationary_gate: {}, idle_time: {}s }}",
+            "RadarConfiguration {{ max_gate: {}, max_moving_gate: {}, max_stationary_gate: {}, idle_time: {}s, motion_sensitivity: {:?}, stationary_sensitivity: {:?} }}",
             self.max_gate,
             self.max_moving_gate,
             self.max_stationary_gate,
-            self.sensor_idle_time
-        )
+            self.sensor_idle_time,
+            &self.motion_sensitivity[..],
+            &self.stationary_sensitivity[..]
+        );
     }
 }
 
@@ -176,17 +178,20 @@ where
     }
 
     fn decode_data_frame(&self, buf: &[u8]) -> Option<RadarData> {
-        if buf.len() >= 13 && buf[1] == 0xAA && buf[11] == 0x55 && buf[12] == 0x00 {
-            Some(RadarData {
-                target_status: buf[2],
-                movement_target_distance: u16::from_le_bytes(buf[3..5].try_into().unwrap()),
-                stationary_target_distance: u16::from_le_bytes(buf[6..8].try_into().unwrap()),
-                detection_distance: u16::from_le_bytes(buf[9..11].try_into().unwrap()),
-            })
-        } else {
-            error!("Invalid data format");
-            None
+        if buf.len() < 13 || buf[1] != 0xAA || buf[11] != 0x55 || buf[12] != 0x00 {
+            return None;
         }
+
+        let movement_target_distance = u16::from_le_bytes(buf[3..5].try_into().ok()?);
+        let stationary_target_distance = u16::from_le_bytes(buf[6..8].try_into().ok()?);
+        let detection_distance = u16::from_le_bytes(buf[9..11].try_into().ok()?);
+
+        Some(RadarData {
+            target_status: buf[2],
+            movement_target_distance,
+            stationary_target_distance,
+            detection_distance,
+        })
     }
 
     fn read_exact<T: Read>(uart: &mut T, buf: &mut [u8]) -> Result<(), T::Error> {
