@@ -119,11 +119,12 @@ fn main() -> ! {
     if let Some(c) = config {
         info!("Current configuration: {}", c);
     }
-
-    if let Ok(Some(event)) = radar.get_radar_data() {
-        info!("Radar data: {:?}", event);
+    loop {
+        if let Ok(Some(event)) = radar.get_radar_data() {
+            info!("Radar data: {:?}", event);
+        }
+        delay.delay_millis(100);
     }
-
     let mut rtc = Rtc::new(peripherals.LPWR);
     rtc.rwdt.disable();
 

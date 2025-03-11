@@ -154,13 +154,12 @@ impl Format for RadarData {
     fn format(&self, f: defmt::Formatter) {
         defmt::write!(
             f,
-            "RadarData {{ status: {}, movement: {}cm, stationary: {}cm, detection: {}cm }}, energy: {{ movement: {}, stationary: {} }}",
-            self.target_state,
+            "movement: {}cm, stationary: {}cm, detection: {}cm, energy: movement: {}, stationary: {}",
             self.movement_target_distance,
             self.stationary_target_distance,
             self.detection_distance,
             self.movement_target_energy,
-            self.stationary_target_energy
+            self.stationary_target_energy,
         )
     }
 }
