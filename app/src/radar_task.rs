@@ -4,15 +4,15 @@ use embassy_time::{Delay, Timer};
 use esp_hal::{
     gpio::GpioPin,
     peripherals::UART0,
-    uart::{Config, Uart},
+    uart::{Config, Parity::None, StopBits, Uart},
 };
 
 #[embassy_executor::task()]
-pub async fn render_task(rx_pin: GpioPin<44>, tx_pin: GpioPin<43>, uart0: UART0) {
+pub async fn radar_task(rx_pin: GpioPin<44>, tx_pin: GpioPin<43>, uart0: UART0) {
     let config = Config::default()
         .with_baudrate(256000)
-        .with_parity(esp_hal::uart::Parity::None)
-        .with_stop_bits(esp_hal::uart::StopBits::_1);
+        .with_parity(None)
+        .with_stop_bits(StopBits::_1);
 
     let uart0 = Uart::new(uart0, config).expect("Failed to initialize UART0");
 

@@ -13,7 +13,8 @@ use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::i2c::master::I2c;
 use esp_hal::xtensa_lx::singleton;
 use esp_hal_embassy::main;
-use hardware::HardwareMcu;
+use pmu::PmuImpl;
+use radar_task::radar_task;
 use render_task::{render_task, RenderTaskPeriphals};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::{ComponentHandle, PhysicalSize};
@@ -26,7 +27,7 @@ extern crate alloc;
 
 mod controller;
 mod draw_buffer;
-mod hardware;
+mod pmu;
 mod radar_task;
 mod render_task;
 mod slint_backend;
@@ -95,7 +96,7 @@ async fn main(spawner: Spawner) {
 
     // TASK: run the radar task
     spawner
-        .spawn(radar_task::render_task(
+        .spawn(radar_task(
             peripherals.GPIO44,
             peripherals.GPIO43,
             peripherals.UART0,
@@ -106,10 +107,10 @@ async fn main(spawner: Spawner) {
     let app_window = AppWindow::new().expect("UI init failed");
     app_window.show().expect("UI show failed");
 
-    // Initialize hardware
-    let hardware = HardwareMcu::new(i2c_ref_cell);
+    // Initialize power management unit
+    let pmu = PmuImpl::new(i2c_ref_cell);
 
     // run the controller event loop
-    let mut controller = Controller::new(&app_window, hardware);
+    let mut controller = Controller::new(&app_window, pmu);
     controller.run().await;
 }

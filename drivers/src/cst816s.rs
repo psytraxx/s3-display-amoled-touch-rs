@@ -9,6 +9,7 @@ const CST816S_ADDRESS: u8 = 0x15;
 pub const RAW_TOUCH_EVENT_LEN: usize = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Gesture {
     None = 0x00,
     SwipeUp = 0x01,
@@ -37,6 +38,7 @@ impl From<u8> for Gesture {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Event {
     Down = 0,
     Up = 1,
@@ -55,6 +57,7 @@ impl From<u8> for Event {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TouchData {
     pub gesture: Gesture,
     pub points: u8,
@@ -310,6 +313,7 @@ where
 
 /// Errors that can occur when interacting with the BQ25896
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum TouchSensorError {
     WriteError,
     ReadError,

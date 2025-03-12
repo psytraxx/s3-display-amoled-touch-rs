@@ -19,14 +19,14 @@ type ActionChannelType = Channel<CriticalSectionRawMutex, Action, 2>;
 
 pub static ACTION: ActionChannelType = Channel::new();
 
-pub trait Hardware {
+pub trait Pmu {
     fn get_pmu_info(&mut self) -> String;
     fn toggle_pmu_charger(&mut self, state: bool) -> bool;
 }
 
 impl<'a, H> Controller<'a, H>
 where
-    H: Hardware,
+    H: Pmu,
 {
     pub fn new(app_window: &'a AppWindow, hardware: H) -> Self {
         Self {
