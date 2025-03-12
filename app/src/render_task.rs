@@ -106,14 +106,17 @@ pub async fn render_task(
 
             // Handle touch events
             if touch_event.points > 0 && !touch_registered {
+                info!("Touch registered");
                 window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
                     position,
                     button: PointerEventButton::Left,
                 });
                 touch_registered = true;
             } else if touch_event.points > 0 && touch_registered {
+                info!("Touch moved");
                 window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position });
             } else if touch_event.points == 0 && touch_registered {
+                info!("Touch released");
                 window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
                     position,
                     button: PointerEventButton::Left,

@@ -1,5 +1,5 @@
 use alloc::string::String;
-use defmt::{error, warn};
+use defmt::{error, info, warn};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 
 use crate::AppWindow;
@@ -40,7 +40,7 @@ where
 
         loop {
             let action = ACTION.receive().await;
-
+            info!("process action {}", &action);
             match self.process_action(action).await {
                 Ok(()) => {
                     // all good
