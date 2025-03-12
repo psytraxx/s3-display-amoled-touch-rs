@@ -21,7 +21,7 @@ use mipidsi::interface::SpiInterface;
 use slint::{
     platform::{
         software_renderer::{MinimalSoftwareWindow, Rgb565Pixel},
-        PointerEventButton,
+        PointerEventButton, WindowEvent,
     },
     LogicalPosition,
 };
@@ -89,41 +89,14 @@ pub async fn render_task(
     let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
     let mut delay = Delay::new();
     let mut buffer_provider = DrawBuffer::new(di, line_buffer, rst, &mut delay);
-
-    let mut touch_registered = false;
+    let mut last_touch: Option<slint::LogicalPosition> = None;
 
     loop {
         // Update timers and animations
         slint::platform::update_timers_and_animations();
 
-        // Read touch events
-        if let Some(touch_event) = touchpad.read_touch(true).expect("read touch failed") {
-            info!("Touch event: {:?}", defmt::Debug2Format(&touch_event));
-            let position = LogicalPosition::new(
-                DISPLAY_WIDTH as f32 - touch_event.x as f32,
-                DISPLAY_HEIGHT as f32 - touch_event.y as f32,
-            );
-
-            // Handle touch events
-            if touch_event.points > 0 && !touch_registered {
-                info!("Touch registered");
-                window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
-                    position,
-                    button: PointerEventButton::Left,
-                });
-                touch_registered = true;
-            } else if touch_event.points > 0 && touch_registered {
-                info!("Touch moved");
-                window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position });
-            } else if touch_event.points == 0 && touch_registered {
-                info!("Touch released");
-                window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
-                    position,
-                    button: PointerEventButton::Left,
-                });
-                touch_registered = false;
-            }
-        }
+        // process touchscreen events
+        process_touch(&mut touchpad, &mut last_touch, window.clone());
 
         // Draw the scene if something needs to be drawn
         let is_dirty = window.draw_if_needed(|renderer| {
@@ -132,6 +105,48 @@ pub async fn render_task(
 
         if !is_dirty {
             Timer::after_millis(10).await
+        }
+    }
+}
+
+fn process_touch(
+    touch: &mut CST816S<AtomicDevice<'_, I2c<'_, Blocking>>, esp_hal::gpio::Input<'_>>,
+    last_touch: &mut Option<slint::LogicalPosition>,
+    window: Rc<MinimalSoftwareWindow>,
+) {
+    // process touchscreen touch events
+    match touch.read_touch(true) {
+        Ok(point) => {
+            let button = PointerEventButton::Left;
+            let event = match point {
+                Some(point) => {
+                    let position = LogicalPosition::new(
+                        DISPLAY_WIDTH as f32 - point.x as f32,
+                        DISPLAY_HEIGHT as f32 - point.y as f32,
+                    );
+
+                    Some(match last_touch.replace(position) {
+                        Some(_) => WindowEvent::PointerMoved { position },
+                        None => WindowEvent::PointerPressed { position, button },
+                    })
+                }
+                None => last_touch
+                    .take()
+                    .map(|position| WindowEvent::PointerReleased { position, button }),
+            };
+
+            if let Some(event) = event {
+                let is_pointer_release_event = matches!(event, WindowEvent::PointerReleased { .. });
+                window.dispatch_event(event);
+
+                // removes hover state on widgets
+                if is_pointer_release_event {
+                    window.dispatch_event(WindowEvent::PointerExited);
+                }
+            }
+        }
+        Err(_) => {
+            // ignore as these are expected NotReady messages from the touchscreen
         }
     }
 }
