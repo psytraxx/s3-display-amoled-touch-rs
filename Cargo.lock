@@ -70,6 +70,8 @@ dependencies = [
  "defmt-rtt",
  "drivers",
  "embassy-executor",
+ "embassy-futures",
+ "embassy-sync",
  "embassy-time",
  "embedded-graphics-core",
  "embedded-hal 1.0.0",
