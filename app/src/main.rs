@@ -27,6 +27,7 @@ extern crate alloc;
 mod controller;
 mod draw_buffer;
 mod hardware;
+mod radar_task;
 mod render_task;
 mod slint_backend;
 
@@ -91,6 +92,15 @@ async fn main(spawner: Spawner) {
 
     // TASK: run the gui render loop
     spawner.spawn(render_task(window, p, i2c_ref_cell)).ok();
+
+    // TASK: run the radar task
+    spawner
+        .spawn(radar_task::render_task(
+            peripherals.GPIO44,
+            peripherals.GPIO43,
+            peripherals.UART0,
+        ))
+        .ok();
 
     // Initialize UI
     let app_window = AppWindow::new().expect("UI init failed");

@@ -1,5 +1,4 @@
 use alloc::rc::Rc;
-use defmt::info;
 use drivers::cst816s::CST816S;
 use embassy_time::Timer;
 use embedded_hal_bus::{i2c::AtomicDevice, spi::ExclusiveDevice, util::AtomicCell};
