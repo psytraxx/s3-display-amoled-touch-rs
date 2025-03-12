@@ -1,0 +1,59 @@
+global Palette {
+    out property <color> neutralSecondaryAlt: #8a8886;
+    out property <color> neutralLight:  #edebe9;
+    out property <color> white:  #ffffff;
+    out property <color> black:  #000000;
+    out property <color> neutralDark:  #201f1e;
+}
+
+export global Theme {
+    out property <color> page-background-color: Palette.white;
+    out property <color> text-foreground-color: Palette.black;
+    out property <length> font-size-standard: 24px;
+    out property <length> font-size-small: 18px;
+}
+
+export component Toggle inherits Rectangle {
+    callback clicked();
+    in-out property <bool> on;
+    width: 100px;
+    height: 40px;
+
+    Rectangle {
+        width: 100px;
+        height: 40px;
+        background: on ? blue : gray;
+        animate background {
+            duration: 100ms;
+            easing: ease;
+        }
+        border-radius: 20px;
+
+        Text {
+            text: on ? "On" : "Off";
+            x: on ? 8px : parent.width - 50px;
+            color: white;
+            font-size: Theme.font-size-standard;
+        }
+
+        Rectangle {
+            width: parent.height - 4px;
+            height: parent.height - 4px;
+            x: on ? parent.width - (parent.height - 2px) : 2px;
+            animate x {
+                duration: 100ms;
+                easing: ease;
+            }
+            y: 2px;
+            background: white;
+            border-radius: (parent.height - 4px) / 2;
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            on = !on;
+            root.clicked();
+        }
+    }
+}

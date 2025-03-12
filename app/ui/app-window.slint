@@ -1,4 +1,7 @@
-import { HorizontalBox, VerticalBox, Button, CheckBox } from "std-widgets.slint";
+import { HorizontalBox, VerticalBox, Button, CheckBox, ScrollView } from "std-widgets.slint";
+
+import { Theme, Toggle } from "common.slint";
+
 export component AppWindow inherits Window {
     in-out property <string> text: "Please touch the button \nto update the PMU reading";
     in-out property <bool> charging: false;
@@ -6,24 +9,24 @@ export component AppWindow inherits Window {
 
     width: 536px;
     height: 240px;
-
-    default-font-size: 20px;
-
+    default-font-size: Theme.font-size-standard;
     callback request-update();
     callback toggle-charger(bool);
 
-    HorizontalBox {
-        Flickable {
-            viewport-height: 600px;
+    HorizontalLayout {
+        ScrollView {
             Text {
                 text: root.text;
+                font-size: Theme.font-size-small;
                 wrap: TextWrap.word-wrap;
+                horizontal-alignment: left;
+                vertical-alignment: top;
             }
         }
 
-        VerticalBox {
-
+        VerticalLayout {
             alignment: LayoutAlignment.start;
+            padding: 10px;
 
             Image {
                 source: root.status-icon;
@@ -41,11 +44,15 @@ export component AppWindow inherits Window {
                 }
             }
 
-            CheckBox {
-                text: self.checked ? "Disabled" : "Enabled";
-                checked: root.charging;
-                toggled => {
-                    root.toggle-charger(self.checked);
+            Text {
+                text: "Charging";
+                font-size: Theme.font-size-standard;
+            }
+
+            Toggle {
+                on: root.charging;
+                clicked => {
+                    root.toggle-charger(self.on);
                 }
             }
         }
