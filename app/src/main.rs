@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(async_closure)]
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -19,13 +18,12 @@ use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
 use esp_hal::dma::{DmaRxBuf, DmaTxBuf};
-use esp_hal::gpio::{Input, Level, Output, Pull};
+use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::I2c;
 use esp_hal::rtc_cntl::Rtc;
 use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
-use esp_hal::time::now;
-use esp_hal::time::RateExtU32;
+use esp_hal::time::{Instant, Rate};
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, main};
@@ -69,11 +67,7 @@ fn main() -> ! {
     let mut delay = Delay::new();
 
     // Initialize peripherals
-    let peripherals = esp_hal::init({
-        let mut config = esp_hal::Config::default();
-        config.cpu_clock = CpuClock::_240MHz;
-        config
-    });
+    let peripherals = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::_240MHz));
 
     let mut rtc = Rtc::new(peripherals.LPWR);
     rtc.rwdt.disable();
@@ -119,27 +113,27 @@ fn main() -> ! {
 
     // Initialize touchpad
     let touch_int = peripherals.GPIO21;
-    let touch_int = Input::new(touch_int, Pull::None);
+    let touch_int = Input::new(touch_int, InputConfig::default().with_pull(Pull::None));
     let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int);
 
     // Detect SPI model
     detect_spi_model(AtomicDevice::new(i2c_ref_cell));
 
     // Initialize PMICEN pin
-    let mut pmicen = Output::new(peripherals.GPIO38, Level::Low);
+    let mut pmicen = Output::new(peripherals.GPIO38, Level::Low, OutputConfig::default());
     pmicen.set_high();
     info!("PMICEN set high");
 
     // Initialize display SPI peripherals
-    let sck = Output::new(peripherals.GPIO47, Level::Low);
-    let mosi = Output::new(peripherals.GPIO18, Level::Low);
-    let cs = Output::new(peripherals.GPIO6, Level::High);
+    let sck = Output::new(peripherals.GPIO47, Level::Low, OutputConfig::default());
+    let mosi = Output::new(peripherals.GPIO18, Level::Low, OutputConfig::default());
+    let cs = Output::new(peripherals.GPIO6, Level::High, OutputConfig::default());
 
     // Configure SPI
     let spi = Spi::new(
         peripherals.SPI2,
         Config::default()
-            .with_frequency(75_u32.MHz())
+            .with_frequency(Rate::from_mhz(75))
             .with_mode(Mode::_0),
     )
     .unwrap()
@@ -159,11 +153,11 @@ fn main() -> ! {
     let mut buffer = [0_u8; 512];
     let di = SpiInterface::new(
         spi_device,
-        Output::new(peripherals.GPIO7, Level::Low),
+        Output::new(peripherals.GPIO7, Level::Low, OutputConfig::default()),
         &mut buffer,
     );
 
-    let rst = Output::new(peripherals.GPIO17, Level::High);
+    let rst = Output::new(peripherals.GPIO17, Level::High, OutputConfig::default());
 
     // Initialize buffer provider
     let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
@@ -322,7 +316,7 @@ impl Platform for Backend {
 
     fn duration_since_start(&self) -> core::time::Duration {
         // Calculate duration since start
-        Duration::from_millis(now().duration_since_epoch().to_millis())
+        Duration::from_millis(Instant::now().duration_since_epoch().as_millis())
     }
 
     fn debug_log(&self, arguments: core::fmt::Arguments) {
