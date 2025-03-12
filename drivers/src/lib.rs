@@ -11,6 +11,9 @@ pub mod bq25896;
 /// CST816S capacitive touch sensor driver.
 pub mod cst816s;
 
+/// LD2410 radar sensor driver.
+pub mod ld2410;
+
 extern crate alloc;
 
 #[cfg(test)]

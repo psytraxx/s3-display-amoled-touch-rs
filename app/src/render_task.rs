@@ -1,5 +1,5 @@
 use alloc::rc::Rc;
-use defmt::info;
+use defmt::error;
 use drivers::cst816s::CST816S;
 use embassy_time::Timer;
 use embedded_hal_bus::{i2c::AtomicDevice, spi::ExclusiveDevice, util::AtomicCell};
@@ -7,7 +7,7 @@ use esp_hal::{
     delay::Delay,
     dma::DmaTxBuf,
     dma_buffers,
-    gpio::{GpioPin, InputConfig, Level, Output, OutputConfig, Pull},
+    gpio::{GpioPin, Input, InputConfig, Level, Output, OutputConfig, Pull},
     i2c::master::I2c,
     peripherals::SPI2,
     spi::{
@@ -46,8 +46,7 @@ pub async fn render_task(
     i2c_ref_cell: &'static AtomicCell<I2c<'static, Blocking>>,
 ) {
     // Initialize touchpad
-    let touch_int =
-        esp_hal::gpio::Input::new(p.touch_pin, InputConfig::default().with_pull(Pull::None));
+    let touch_int = Input::new(p.touch_pin, InputConfig::default().with_pull(Pull::None));
     let mut touchpad = CST816S::new(AtomicDevice::new(i2c_ref_cell), touch_int);
 
     let rst = Output::new(p.reset_pin, Level::High, OutputConfig::default());
@@ -89,7 +88,7 @@ pub async fn render_task(
     let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
     let mut delay = Delay::new();
     let mut buffer_provider = DrawBuffer::new(di, line_buffer, rst, &mut delay);
-    let mut last_touch: Option<slint::LogicalPosition> = None;
+    let mut last_touch: Option<LogicalPosition> = None;
 
     loop {
         // Update timers and animations
@@ -110,11 +109,10 @@ pub async fn render_task(
 }
 
 fn process_touch(
-    touch: &mut CST816S<AtomicDevice<'_, I2c<'_, Blocking>>, esp_hal::gpio::Input<'_>>,
-    last_touch: &mut Option<slint::LogicalPosition>,
+    touch: &mut CST816S<AtomicDevice<'_, I2c<'_, Blocking>>, Input<'_>>,
+    last_touch: &mut Option<LogicalPosition>,
     window: Rc<MinimalSoftwareWindow>,
 ) {
-    // process touchscreen touch events
     match touch.read_touch(true) {
         Ok(point) => {
             let button = PointerEventButton::Left;
@@ -124,7 +122,6 @@ fn process_touch(
                         DISPLAY_WIDTH as f32 - point.x as f32,
                         DISPLAY_HEIGHT as f32 - point.y as f32,
                     );
-
                     Some(match last_touch.replace(position) {
                         Some(_) => WindowEvent::PointerMoved { position },
                         None => WindowEvent::PointerPressed { position, button },
@@ -138,15 +135,14 @@ fn process_touch(
             if let Some(event) = event {
                 let is_pointer_release_event = matches!(event, WindowEvent::PointerReleased { .. });
                 window.dispatch_event(event);
-
                 // removes hover state on widgets
                 if is_pointer_release_event {
                     window.dispatch_event(WindowEvent::PointerExited);
                 }
             }
         }
-        Err(_) => {
-            // ignore as these are expected NotReady messages from the touchscreen
+        Err(e) => {
+            error!("Touch read error: {:?}", e);
         }
     }
 }

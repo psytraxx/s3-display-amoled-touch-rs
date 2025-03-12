@@ -6,17 +6,17 @@ use embedded_hal_bus::{i2c::AtomicDevice, util::AtomicCell};
 use esp_hal::{i2c::master::I2c, Blocking};
 
 use crate::{
-    controller::Hardware, BQ25896_SLAVE_ADDRESS, PMU_CHARGE_TARGET_VOLTAGE,
-    PMU_CONSTANT_CHARGE_CURRENT, PMU_PRECHARGE_CURRENT,
+    controller::Pmu, BQ25896_SLAVE_ADDRESS, PMU_CHARGE_TARGET_VOLTAGE, PMU_CONSTANT_CHARGE_CURRENT,
+    PMU_PRECHARGE_CURRENT,
 };
 
 type PmuDevice = BQ25896<AtomicDevice<'static, I2c<'static, Blocking>>>;
 
-pub struct HardwareMcu {
+pub struct PmuImpl {
     pmu: PmuDevice,
 }
 
-impl HardwareMcu {
+impl PmuImpl {
     pub fn new(i2c_ref_cell: &'static AtomicCell<I2c<'static, Blocking>>) -> Self {
         // Detect SPI model
         detect_spi_model(AtomicDevice::new(i2c_ref_cell));
@@ -48,7 +48,7 @@ impl HardwareMcu {
     }
 }
 
-impl Hardware for HardwareMcu {
+impl Pmu for PmuImpl {
     fn get_pmu_info(&mut self) -> String {
         self.pmu.get_info().expect("get_info failed")
     }

@@ -11,7 +11,7 @@ esp-backtrace = { version = "0.15.0", features = [
     "defmt",
 ] }
 mipidsi = { git = "https://github.com/almindor/mipidsi.git", branch = "master" }
-drivers = { path = "../drivers" }
+drivers = { path = "../drivers", features = ["defmt"] }
 esp-hal = { version = "1.0.0-beta", features = [
     "esp32s3",
     "defmt",
@@ -25,7 +25,7 @@ embedded-hal = { version = "1.0.0", features = ["defmt-03"] }
 embedded-graphics-core = { version = "0.4.0", features = ["defmt"] }
 embedded-hal-bus = { version = "0.3.0", features = ["defmt-03"] }
 libm = "0.2.11"
-slint = { version = "1.9.1", default-features = false, features = [
+slint = { version = "1.10.0", default-features = false, features = [
     "libm",
     "unsafe-single-threaded",
     "compat-1-2",
