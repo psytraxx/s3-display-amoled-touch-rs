@@ -10,7 +10,7 @@ export component AppWindow inherits Window {
     default-font-size: 20px;
 
     callback request-update();
-    callback toggle-charger();
+    callback toggle-charger(bool);
 
     HorizontalBox {
         Flickable {
@@ -45,7 +45,7 @@ export component AppWindow inherits Window {
                 text: self.checked ? "Disabled" : "Enabled";
                 checked: root.charging;
                 toggled => {
-                    root.toggle-charger();
+                    root.toggle-charger(self.checked);
                 }
             }
         }
