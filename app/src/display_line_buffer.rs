@@ -1,30 +1,15 @@
 use embedded_graphics_core::pixelcolor::raw::RawU16;
-use embedded_hal::digital::OutputPin;
-use mipidsi::interface::{Interface, InterfacePixelFormat};
-use mipidsi::models::{Model, RM67162};
-use mipidsi::Display;
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
-pub struct DisplayLineBuffer<'a, DI, MODEL, RST>
-where
-    DI: Interface<Word = u8>,
-    MODEL: Model,
-    MODEL::ColorFormat: InterfacePixelFormat<DI::Word>,
-    RST: OutputPin,
-{
-    pub display: Display<DI, MODEL, RST>,
+use crate::RM67162Display;
+
+pub struct DisplayLineBuffer<'a> {
+    pub display: RM67162Display,
     pub line_buffer: &'a mut [Rgb565Pixel],
 }
 
-impl<DI, RST> DisplayLineBuffer<'_, DI, RM67162, RST>
-where
-    DI: Interface<Word = u8>,
-    RST: OutputPin,
-{
-    pub fn new(
-        display: Display<DI, RM67162, RST>,
-        line_buffer: &mut [Rgb565Pixel],
-    ) -> DisplayLineBuffer<'_, DI, RM67162, RST> {
+impl DisplayLineBuffer<'_> {
+    pub fn new(display: RM67162Display, line_buffer: &mut [Rgb565Pixel]) -> DisplayLineBuffer<'_> {
         DisplayLineBuffer {
             display,
             line_buffer,
@@ -32,11 +17,7 @@ where
     }
 }
 
-impl<DI, RST> LineBufferProvider for &mut DisplayLineBuffer<'_, DI, RM67162, RST>
-where
-    DI: Interface<Word = u8>,
-    RST: OutputPin,
-{
+impl LineBufferProvider for &mut DisplayLineBuffer<'_> {
     type TargetPixel = Rgb565Pixel;
 
     fn process_line(

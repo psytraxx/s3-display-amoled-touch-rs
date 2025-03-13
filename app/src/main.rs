@@ -11,7 +11,7 @@ use embassy_executor::Spawner;
 use embassy_time::Delay;
 use embedded_hal::i2c::I2c as I2CBus;
 use embedded_hal_bus::i2c::AtomicDevice;
-use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_hal_bus::util::AtomicCell;
 use esp_alloc::psram_allocator;
 use esp_hal::clock::CpuClock;
@@ -50,14 +50,10 @@ pub const DISPLAY_HEIGHT: u16 = 240;
 /// Display resolution width in pixels
 pub const DISPLAY_WIDTH: u16 = 536;
 
-pub type MipiDisplay = Display<
+pub type RM67162Display = Display<
     SpiInterface<
         'static,
-        ExclusiveDevice<
-            SpiDmaBus<'static, Blocking>,
-            Output<'static>,
-            embedded_hal_bus::spi::NoDelay,
-        >,
+        ExclusiveDevice<SpiDmaBus<'static, Blocking>, Output<'static>, NoDelay>,
         Output<'static>,
     >,
     RM67162,
@@ -181,7 +177,7 @@ fn initialize_display(
     cs: GpioPin<6>,
     spi: SPI2,
     dma: DmaChannel0,
-) -> MipiDisplay {
+) -> RM67162Display {
     // Initialize display SPI peripherals
 
     let dc = Output::new(dc, Level::Low, OutputConfig::default());

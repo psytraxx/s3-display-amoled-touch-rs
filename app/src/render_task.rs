@@ -10,12 +10,14 @@ use slint::{
     LogicalPosition,
 };
 
-use crate::{display_line_buffer::DisplayLineBuffer, MipiDisplay, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use crate::{
+    display_line_buffer::DisplayLineBuffer, RM67162Display, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+};
 
 #[embassy_executor::task()]
 pub async fn render_task(
     window: Rc<MinimalSoftwareWindow>,
-    display: MipiDisplay,
+    display: RM67162Display,
     mut touchpad: Box<dyn TouchInput>,
 ) {
     // Initialize buffer provider
