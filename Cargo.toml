@@ -1,5 +1,5 @@
 [workspace]
-members = ["app", "drivers"]
+members = ["app", "drivers", "slint-generated"]
 resolver = "2"
 
 [profile.dev]
