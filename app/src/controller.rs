@@ -1,8 +1,7 @@
 use alloc::string::String;
 use defmt::{error, info, warn};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-
-use crate::AppWindow;
+use slint_generated::AppWindow;
 
 pub struct Controller<'a, Hardware> {
     app_window: &'a AppWindow,

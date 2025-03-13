@@ -89,7 +89,7 @@ dependencies = [
  "libm",
  "mipidsi",
  "slint",
- "slint-build",
+ "slint-generated",
 ]
 
 [[package]]
@@ -4407,6 +4407,14 @@ dependencies = [
  "i-slint-compiler",
  "spin_on",
  "toml_edit 0.22.24",
+]
+
+[[package]]
+name = "slint-generated"
+version = "0.1.0"
+dependencies = [
+ "slint",
+ "slint-build",
 ]
 
 [[package]]

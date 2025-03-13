@@ -103,6 +103,10 @@ pub struct MotionMask {
     pub continuous_leftright: bool,
 }
 
+pub trait TouchInput {
+    fn read_touch(&mut self, check_int_pin: bool) -> Result<Option<TouchData>, TouchSensorError>;
+}
+
 #[derive(Debug)]
 pub struct CST816S<I2C, PIN> {
     dev: CST816SDevice<I2C>,
@@ -147,45 +151,6 @@ where
         seconds = seconds.clamp(1, 255);
 
         self.dev.write_register(0xF9, seconds as u8)
-    }
-
-    pub fn read_touch(
-        &mut self,
-        check_int_pin: bool,
-    ) -> Result<Option<TouchData>, TouchSensorError> {
-        // return if no touch detected
-        if check_int_pin && !self.is_touch_available() {
-            return Ok(None);
-        }
-
-        let mut buffer = [0u8; 13];
-
-        self.dev
-            .read_register(0x00, &mut buffer)
-            .map_err(|_| TouchSensorError::WriteError)?;
-
-        let gesture = Gesture::from(buffer[1]);
-        let points = buffer[2] & 0x0F;
-
-        let x_high = buffer[3] & 0x0f;
-        let x_low = buffer[4];
-
-        let y_high = buffer[5] & 0x0f;
-        let y_low = buffer[6];
-
-        let x: u16 = (u16::from(x_high) << 8) | u16::from(x_low);
-        let y: u16 = (u16::from(y_high) << 8) | u16::from(y_low);
-
-        let event = Event::from(buffer[3] >> 6);
-
-        let data = TouchData {
-            gesture,
-            points,
-            event,
-            x,
-            y,
-        };
-        Ok(Some(data))
     }
 
     /// Reads the long press time setting from the sensor.
@@ -269,6 +234,48 @@ where
 
     fn is_touch_available(&mut self) -> bool {
         self.touch_int.is_low().unwrap()
+    }
+}
+
+impl<I2C, PIN> TouchInput for CST816S<I2C, PIN>
+where
+    I2C: I2c,
+    PIN: InputPin,
+{
+    fn read_touch(&mut self, check_int_pin: bool) -> Result<Option<TouchData>, TouchSensorError> {
+        // return if no touch detected
+        if check_int_pin && !self.is_touch_available() {
+            return Ok(None);
+        }
+
+        let mut buffer = [0u8; 13];
+
+        self.dev
+            .read_register(0x00, &mut buffer)
+            .map_err(|_| TouchSensorError::WriteError)?;
+
+        let gesture = Gesture::from(buffer[1]);
+        let points = buffer[2] & 0x0F;
+
+        let x_high = buffer[3] & 0x0f;
+        let x_low = buffer[4];
+
+        let y_high = buffer[5] & 0x0f;
+        let y_low = buffer[6];
+
+        let x: u16 = (u16::from(x_high) << 8) | u16::from(x_low);
+        let y: u16 = (u16::from(y_high) << 8) | u16::from(y_low);
+
+        let event = Event::from(buffer[3] >> 6);
+
+        let data = TouchData {
+            gesture,
+            points,
+            event,
+            x,
+            y,
+        };
+        Ok(Some(data))
     }
 }
 
