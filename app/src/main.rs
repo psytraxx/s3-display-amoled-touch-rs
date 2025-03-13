@@ -37,6 +37,7 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferTyp
 use slint::{ComponentHandle, PhysicalSize};
 use slint_backend::Backend;
 use slint_generated::AppWindow;
+use {defmt_rtt as _, esp_backtrace as _};
 
 mod controller;
 mod display_line_buffer;
@@ -77,6 +78,11 @@ async fn main(spawner: Spawner) {
     // Initialize PSRAM allocator
     psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
+    // Initialize PMICEN pin to enable power management IC
+    let mut pmicen = Output::new(peripherals.GPIO38, Level::Low, OutputConfig::default());
+    pmicen.set_high();
+    info!("PMICEN set high");
+
     let i2c_ref_cell = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
 
     let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
@@ -112,7 +118,7 @@ async fn main(spawner: Spawner) {
     app_window.show().expect("UI show failed");
 
     // Initialize power management unit
-    let pmu = PmuImpl::new(i2c_ref_cell, peripherals.GPIO38);
+    let pmu = PmuImpl::new(i2c_ref_cell);
 
     // run the controller event loop
     let mut controller = Controller::new(&app_window, pmu);
@@ -135,7 +141,7 @@ fn initialize_i2c(
 }
 
 // Initialize touchpad
-fn initialize_touchpad<'a, BUS>(
+fn initialize_touchpad<BUS>(
     i2c: &'static AtomicCell<BUS>,
     touch: GpioPin<21>,
 ) -> Box<dyn TouchInput>
@@ -163,12 +169,11 @@ fn initialize_radar<'a>(
 
     let uart0 = uart0.with_rx(rx_pin).with_tx(tx_pin);
 
-    let radar = LD2410::new(uart0, Delay);
-    radar
+    LD2410::new(uart0, Delay)
 }
 
 // Initialize display
-fn initialize_display<'a>(
+fn initialize_display(
     reset: GpioPin<17>,
     dc: GpioPin<7>,
     sck: GpioPin<47>,

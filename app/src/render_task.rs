@@ -2,7 +2,6 @@ use alloc::{boxed::Box, rc::Rc};
 use defmt::error;
 use drivers::cst816s::TouchInput;
 use embassy_time::Timer;
-use esp_hal::delay::Delay;
 use slint::{
     platform::{
         software_renderer::{MinimalSoftwareWindow, Rgb565Pixel},
@@ -22,7 +21,7 @@ pub async fn render_task(
     // Initialize buffer provider
     let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
 
-    let mut buffer_provider = DisplayLineBuffer::new::<Delay>(display, line_buffer);
+    let mut buffer_provider = DisplayLineBuffer::new(display, line_buffer);
     let mut last_touch: Option<LogicalPosition> = None;
 
     loop {

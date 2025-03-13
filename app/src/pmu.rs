@@ -3,7 +3,6 @@ use defmt::{error, info};
 use drivers::bq25896::{PmuSensorError, BQ25896};
 use embedded_hal::i2c::I2c;
 use embedded_hal_bus::{i2c::AtomicDevice, util::AtomicCell};
-use esp_hal::gpio::{GpioPin, Level, Output, OutputConfig};
 
 use crate::controller::Pmu;
 
@@ -27,12 +26,7 @@ impl<BUS> PmuImpl<'_, BUS>
 where
     BUS: I2c,
 {
-    pub fn new(i2c_ref_cell: &'static AtomicCell<BUS>, power_pin: GpioPin<38>) -> Self {
-        // Initialize PMICEN pin to enable power management IC
-        let mut pmicen = Output::new(power_pin, Level::Low, OutputConfig::default());
-        pmicen.set_high();
-        info!("PMICEN set high");
-
+    pub fn new(i2c_ref_cell: &'static AtomicCell<BUS>) -> Self {
         // Detect board model
         Self::detect_spi_model(i2c_ref_cell);
 
