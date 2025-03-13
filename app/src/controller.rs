@@ -1,11 +1,12 @@
-use alloc::string::String;
 use defmt::{error, info, warn};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use slint_generated::AppWindow;
 
-pub struct Controller<'a, Hardware> {
+use crate::BQ25896Pmu;
+
+pub struct Controller<'a> {
     app_window: &'a AppWindow,
-    hardware: Hardware,
+    pmu: BQ25896Pmu,
 }
 
 #[derive(defmt::Format, Debug, Clone)]
@@ -18,20 +19,9 @@ type ActionChannelType = Channel<CriticalSectionRawMutex, Action, 2>;
 
 pub static ACTION: ActionChannelType = Channel::new();
 
-pub trait Pmu {
-    fn get_pmu_info(&mut self) -> String;
-    fn toggle_pmu_charger(&mut self, state: bool) -> bool;
-}
-
-impl<'a, H> Controller<'a, H>
-where
-    H: Pmu,
-{
-    pub fn new(app_window: &'a AppWindow, hardware: H) -> Self {
-        Self {
-            app_window,
-            hardware,
-        }
+impl<'a> Controller<'a> {
+    pub fn new(app_window: &'a AppWindow, pmu: BQ25896Pmu) -> Self {
+        Self { app_window, pmu }
     }
 
     pub async fn run(&mut self) {
@@ -54,13 +44,27 @@ where
     pub async fn process_action(&mut self, action: Action) -> Result<(), ()> {
         match action {
             Action::RequestUpdate => {
-                let text = self.hardware.get_pmu_info();
+                let text = self.pmu.get_info().expect("failed to get info");
                 self.app_window.set_text(text.into());
             }
             Action::ToggleCharger(state) => {
-                let status = self.hardware.toggle_pmu_charger(state);
+                if state {
+                    self.pmu
+                        .set_charge_enabled()
+                        .expect("set_charge_enable failed");
+                } else {
+                    self.pmu
+                        .set_charge_disabled()
+                        .expect("set_charge_disabled failed");
+                }
+
+                let status = self
+                    .pmu
+                    .is_charge_enabled()
+                    .expect("is_charge_enabled failed");
+
                 self.app_window.set_charging(!status);
-                let text = self.hardware.get_pmu_info();
+                let text = self.pmu.get_info().expect("failed to get info");
                 self.app_window.set_text(text.into());
             }
         }
