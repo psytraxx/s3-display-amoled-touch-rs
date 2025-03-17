@@ -10,15 +10,14 @@ use slint::{
 };
 
 use crate::{
-    display_line_buffer::DisplayLineBuffer, CST816STouchpad, RM67162Display, DISPLAY_HEIGHT,
-    DISPLAY_WIDTH,
+    display_line_buffer::DisplayLineBuffer, TouchDisplay, Touchpad, DISPLAY_HEIGHT, DISPLAY_WIDTH,
 };
 
 #[embassy_executor::task()]
 pub async fn render_task(
     window: Rc<MinimalSoftwareWindow>,
-    display: RM67162Display,
-    mut touchpad: CST816STouchpad,
+    display: TouchDisplay,
+    mut touchpad: Touchpad,
 ) {
     // Initialize buffer provider
     let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
@@ -45,7 +44,7 @@ pub async fn render_task(
 }
 
 async fn process_touch(
-    touch: &mut CST816STouchpad,
+    touch: &mut Touchpad,
     last_touch: &mut Option<LogicalPosition>,
     window: Rc<MinimalSoftwareWindow>,
 ) {

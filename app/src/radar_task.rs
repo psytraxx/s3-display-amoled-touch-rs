@@ -1,10 +1,10 @@
 use defmt::info;
 use embassy_time::Timer;
 
-use crate::LD2410Radar;
+use crate::RadarSensor;
 
 #[embassy_executor::task()]
-pub async fn radar_task(mut radar: LD2410Radar) {
+pub async fn radar_task(mut radar: RadarSensor) {
     /*
     let version = radar
         .request_factory_reset()

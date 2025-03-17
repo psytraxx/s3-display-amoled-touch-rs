@@ -61,7 +61,7 @@ const PMU_PRECHARGE_CURRENT: u16 = 128;
 const PMU_CONSTANT_CHARGE_CURRENT: u16 = 1536;
 
 /// Type alias for the RM67162 display instance using SPI interface
-pub type RM67162Display = Display<
+pub type TouchDisplay = Display<
     SpiInterface<
         'static,
         ExclusiveDevice<SpiDmaBus<'static, Blocking>, Output<'static>, NoDelay>,
@@ -71,15 +71,13 @@ pub type RM67162Display = Display<
     Output<'static>,
 >;
 
-/// Type alias for the BQ25896 power management unit instance
-pub type BQ25896Pmu = BQ25896<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>>;
-
 pub type I2C0Bus = Mutex<NoopRawMutex, I2c<'static, Async>>;
 
-pub type LD2410Radar = LD2410<Uart<'static, Async>, Delay>;
+pub type Charger = BQ25896<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>>;
 
-pub type CST816STouchpad =
-    CST816S<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>, Input<'static>>;
+pub type RadarSensor = LD2410<Uart<'static, Async>, Delay>;
+
+pub type Touchpad = CST816S<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>, Input<'static>>;
 
 /// Main entry point for the application
 #[main]
@@ -170,7 +168,7 @@ fn initialize_i2c(i2c: I2C0, sda: GpioPin<3>, scl: GpioPin<2>) -> &'static mut I
 /// Initialize the touchpad by configuring the relevant GPIO pin and wrapping
 /// the CST816S touch sensor driver.
 /// Returns a boxed trait object to abstract over the touch input interface.
-fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> CST816STouchpad {
+fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> Touchpad {
     // Configure the GPIO pin for the touch input with no pull-up/down
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
     let i2c_device = I2cDevice::new(i2c_bus);
@@ -180,7 +178,7 @@ fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> CST816S
 
 /// Create and initialize the radar sensor (LD2410) interface using UART.
 /// Returns the configured radar instance.
-fn initialize_radar(uart1: UART0, rx_pin: GpioPin<44>, tx_pin: GpioPin<43>) -> LD2410Radar {
+fn initialize_radar(uart1: UART0, rx_pin: GpioPin<44>, tx_pin: GpioPin<43>) -> RadarSensor {
     // Configure UART options including baud rate, parity, and stop bits
     let config = UartConfig::default()
         .with_baudrate(256000)
@@ -207,7 +205,7 @@ fn initialize_display(
     cs: GpioPin<6>,
     spi: SPI2,
     dma: DmaChannel0,
-) -> RM67162Display {
+) -> TouchDisplay {
     // Set up GPIO pins for display control signals (Data/Command, Chip Select, Reset, Clock, MOSI)
     let dc = Output::new(dc, Level::Low, OutputConfig::default());
     let cs = Output::new(cs, Level::High, OutputConfig::default());
@@ -275,7 +273,7 @@ async fn detect_spi_model(i2c_bus: &'static I2C0Bus) {
 /// Initializes and configures the power management unit (PMU)
 /// by setting charging target, precharge current, and fast charge current limits.
 /// Returns the configured PMU instance
-async fn initialize_pmu(i2c_bus: &'static I2C0Bus) -> BQ25896Pmu {
+async fn initialize_pmu(i2c_bus: &'static I2C0Bus) -> Charger {
     let i2c_device = I2cDevice::new(i2c_bus);
 
     // Create a new PMU instance on the I2C bus at the designated slave address

@@ -2,11 +2,11 @@ use defmt::{error, info, warn};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use slint_generated::AppWindow;
 
-use crate::BQ25896Pmu;
+use crate::Charger;
 
 pub struct Controller<'a> {
     app_window: &'a AppWindow,
-    pmu: BQ25896Pmu,
+    pmu: Charger,
 }
 
 #[derive(defmt::Format, Debug, Clone)]
@@ -20,7 +20,7 @@ type ActionChannelType = Channel<CriticalSectionRawMutex, Action, 2>;
 pub static ACTION: ActionChannelType = Channel::new();
 
 impl<'a> Controller<'a> {
-    pub fn new(app_window: &'a AppWindow, pmu: BQ25896Pmu) -> Self {
+    pub fn new(app_window: &'a AppWindow, pmu: Charger) -> Self {
         Self { app_window, pmu }
     }
 
