@@ -76,6 +76,8 @@ pub type BQ25896Pmu = BQ25896<I2cDevice<'static, NoopRawMutex, I2c<'static, Asyn
 
 pub type I2C0Bus = Mutex<NoopRawMutex, I2c<'static, Async>>;
 
+pub type LD2410Radar = LD2410<Uart<'static, Async>, Delay>;
+
 pub type CST816STouchpad =
     CST816S<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>, Input<'static>>;
 
@@ -178,11 +180,7 @@ fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> CST816S
 
 /// Create and initialize the radar sensor (LD2410) interface using UART.
 /// Returns the configured radar instance.
-fn initialize_radar<'a>(
-    uart1: UART0,
-    rx_pin: GpioPin<44>,
-    tx_pin: GpioPin<43>,
-) -> LD2410<Uart<'a, Blocking>, Delay> {
+fn initialize_radar(uart1: UART0, rx_pin: GpioPin<44>, tx_pin: GpioPin<43>) -> LD2410Radar {
     // Configure UART options including baud rate, parity, and stop bits
     let config = UartConfig::default()
         .with_baudrate(256000)
@@ -193,7 +191,7 @@ fn initialize_radar<'a>(
     let uart0 = uart::Uart::new(uart1, config).expect("Failed to initialize UART0");
 
     // Associate the UART with its designated RX and TX GPIO pins
-    let uart0 = uart0.with_rx(rx_pin).with_tx(tx_pin);
+    let uart0 = uart0.with_rx(rx_pin).with_tx(tx_pin).into_async();
 
     // Construct the radar driver with the configured UART and a delay provider
     LD2410::new(uart0, Delay)
