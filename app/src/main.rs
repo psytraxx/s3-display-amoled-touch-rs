@@ -7,14 +7,15 @@ use alloc::boxed::Box;
 use controller::Controller;
 use defmt::{error, info};
 use drivers::bq25896::BQ25896;
-use drivers::cst816s::{TouchInput, CST816S};
+use drivers::cst816s::CST816S;
 use drivers::ld2410::LD2410;
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::mutex::Mutex;
 use embassy_time::Delay;
-use embedded_hal::i2c::I2c as I2CBus;
-use embedded_hal_bus::i2c::AtomicDevice;
+use embedded_hal_async::i2c::I2c as I2cTrait;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use embedded_hal_bus::util::AtomicCell;
 use esp_alloc::psram_allocator;
 use esp_hal::clock::CpuClock;
 use esp_hal::dma::{DmaChannel0, DmaTxBuf};
@@ -25,8 +26,7 @@ use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
 use esp_hal::time::Rate;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
-use esp_hal::xtensa_lx::singleton;
-use esp_hal::{dma_buffers, uart, Blocking};
+use esp_hal::{dma_buffers, uart, Async, Blocking};
 use esp_hal_embassy::main;
 use mipidsi::interface::SpiInterface;
 use mipidsi::models::RM67162;
@@ -38,6 +38,7 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferTyp
 use slint::{ComponentHandle, PhysicalSize};
 use slint_backend::Backend;
 use slint_generated::AppWindow;
+use static_cell::StaticCell;
 use {defmt_rtt as _, esp_backtrace as _};
 
 mod controller;
@@ -71,7 +72,12 @@ pub type RM67162Display = Display<
 >;
 
 /// Type alias for the BQ25896 power management unit instance
-pub type BQ25896Pmu = BQ25896<AtomicDevice<'static, I2c<'static, Blocking>>>;
+pub type BQ25896Pmu = BQ25896<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>>;
+
+pub type I2C0Bus = Mutex<NoopRawMutex, I2c<'static, Async>>;
+
+pub type CST816STouchpad =
+    CST816S<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>, Input<'static>>;
 
 /// Main entry point for the application
 #[main]
@@ -96,10 +102,10 @@ async fn main(spawner: Spawner) {
     info!("PMICEN set high");
 
     // Initialize the I2C bus used by several peripherals
-    let i2c_ref_cell = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
+    let i2c_bus = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
 
     // Try to detect the connected SPI model based on I2C responses
-    detect_spi_model(i2c_ref_cell);
+    detect_spi_model(i2c_bus).await;
 
     // Create the GUI window used by Slint's minimal software renderer
     let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
@@ -111,7 +117,7 @@ async fn main(spawner: Spawner) {
     slint::platform::set_platform(backend).expect("set_platform failed");
 
     // Initialize the touchpad interface for user interactions
-    let touchpad = initialize_touchpad(i2c_ref_cell, peripherals.GPIO21);
+    let touchpad = initialize_touchpad(i2c_bus, peripherals.GPIO21);
 
     // Initialize the display connected via SPI with DMA support
     let display = initialize_display(
@@ -138,7 +144,7 @@ async fn main(spawner: Spawner) {
     app_window.show().expect("UI show failed");
 
     // Initialize the power management unit for battery/charger control
-    let pmu = initialize_pmu(i2c_ref_cell);
+    let pmu = initialize_pmu(i2c_bus).await;
 
     // Start the main event loop in the controller with the UI and PMU
     let mut controller = Controller::new(&app_window, pmu);
@@ -147,38 +153,27 @@ async fn main(spawner: Spawner) {
 
 /// Initialize the I2C bus used to communicate with external devices.
 /// Returns a shared, thread-safe reference (AtomicCell) for the I2C instance.
-fn initialize_i2c(
-    i2c: I2C0,
-    sda: GpioPin<3>,
-    scl: GpioPin<2>,
-) -> &'static AtomicCell<I2c<'static, Blocking>> {
+fn initialize_i2c(i2c: I2C0, sda: GpioPin<3>, scl: GpioPin<2>) -> &'static mut I2C0Bus {
     // Create a new I2C master instance with default configuration
     let i2c = I2c::new(i2c, esp_hal::i2c::master::Config::default())
         .unwrap()
         .with_sda(sda)
-        .with_scl(scl);
+        .with_scl(scl)
+        .into_async();
 
-    // Wrap the I2C instance in an AtomicCell for safe shared access across tasks
-    singleton!(:AtomicCell<I2c<'_, Blocking>> = AtomicCell::new(i2c))
-        .expect("Failed to create I2C mutex")
+    static I2C_BUS: StaticCell<I2C0Bus> = StaticCell::new();
+    I2C_BUS.init(Mutex::new(i2c))
 }
 
 /// Initialize the touchpad by configuring the relevant GPIO pin and wrapping
 /// the CST816S touch sensor driver.
 /// Returns a boxed trait object to abstract over the touch input interface.
-fn initialize_touchpad<BUS>(
-    i2c: &'static AtomicCell<BUS>,
-    touch: GpioPin<21>,
-) -> Box<dyn TouchInput>
-where
-    BUS: I2CBus,
-{
+fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> CST816STouchpad {
     // Configure the GPIO pin for the touch input with no pull-up/down
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
-
+    let i2c_device = I2cDevice::new(i2c_bus);
     // Initialize the touch sensor driver using the I2C bus and touch input pin
-    let touchpad = Box::new(CST816S::new(AtomicDevice::new(i2c), touch_pin));
-    touchpad
+    CST816S::new(i2c_device, touch_pin)
 }
 
 /// Create and initialize the radar sensor (LD2410) interface using UART.
@@ -262,17 +257,14 @@ fn initialize_display(
 
 /// Detects the model of the connected SPI board via I2C communication.
 /// This helps in choosing the correct driver configuration.
-fn detect_spi_model<BUS>(i2c_ref_cell: &'static AtomicCell<BUS>)
-where
-    BUS: I2CBus,
-{
+async fn detect_spi_model(i2c_bus: &'static I2C0Bus) {
     // Create an atomic I2C device for safe peripheral access
-    let mut i2c = AtomicDevice::new(i2c_ref_cell);
+    let mut i2c = I2cDevice::new(i2c_bus);
 
     // Attempt to communicate with a known I2C address to identify the board model
-    if i2c.write(0x15, &[]).is_ok() {
+    if i2c.write(0x15, &[]).await.is_ok() {
         // Further check a secondary address to distinguish between SPI and QSPI models
-        if i2c.write(0x51, &[]).is_ok() {
+        if i2c.write(0x51, &[]).await.is_ok() {
             info!("Detect 1.91-inch SPI board model!");
         } else {
             info!("Detect 1.91-inch QSPI board model!");
@@ -284,52 +276,59 @@ where
 
 /// Initializes and configures the power management unit (PMU)
 /// by setting charging target, precharge current, and fast charge current limits.
-/// Returns the configured PMU instance.
-fn initialize_pmu<BUS>(
-    i2c_ref_cell: &'static AtomicCell<BUS>,
-) -> BQ25896<AtomicDevice<'static, BUS>>
-where
-    BUS: I2CBus,
-{
+/// Returns the configured PMU instance
+async fn initialize_pmu(i2c_bus: &'static I2C0Bus) -> BQ25896Pmu {
+    let i2c_device = I2cDevice::new(i2c_bus);
+
     // Create a new PMU instance on the I2C bus at the designated slave address
-    let mut pmu = BQ25896::new(AtomicDevice::new(i2c_ref_cell), BQ25896_SLAVE_ADDRESS)
+    let mut pmu = BQ25896::new(i2c_device, BQ25896_SLAVE_ADDRESS)
+        .await
         .expect("Failed to initialize BQ25896");
 
     // Configure the charging target voltage for the battery charger
     pmu.set_charge_target_voltage(PMU_CHARGE_TARGET_VOLTAGE)
+        .await
         .expect("set_charge_target_voltage failed");
 
     // Configure the precharge current for battery charging
     pmu.set_precharge_current(PMU_PRECHARGE_CURRENT)
+        .await
         .expect("set_precharge_current failed");
 
     // Configure the fast (constant) charge current limit
     pmu.set_fast_charge_current_limit(PMU_CONSTANT_CHARGE_CURRENT)
+        .await
         .expect("set_fast_charge_current_limit failed");
 
     // Enable ADC for power measurement in the PMU
-    pmu.set_adc_enabled().expect("set_adc_enabled failed");
+    pmu.set_adc_enabled().await.expect("set_adc_enabled failed");
 
     // Retrieve and log the configured fast charge current limit
     let fast_charge_current_limit = pmu
         .get_fast_charge_current_limit()
+        .await
         .expect("get_fast_charge_current_limit failed");
     info!("Fast charge current limit: {}", fast_charge_current_limit);
 
     // Retrieve and log the precharge current setting
     let precharge_current = pmu
         .get_precharge_current()
+        .await
         .expect("get_precharge_current failed");
     info!("Precharge current: {}", precharge_current);
 
     // Retrieve and log the charging target voltage
     let charge_target_voltage = pmu
         .get_charge_target_voltage()
+        .await
         .expect("get_charge_target_voltage failed");
     info!("Charge target voltage: {}", charge_target_voltage);
 
     // Log the chip ID for debugging purposes
-    info!("PMU chip id: {}", pmu.get_chip_id().unwrap());
+    info!(
+        "PMU chip id: {}",
+        pmu.get_chip_id().await.expect("get_chip_id failed")
+    );
 
     pmu
 }

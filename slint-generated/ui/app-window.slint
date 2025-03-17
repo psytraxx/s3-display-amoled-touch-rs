@@ -1,5 +1,4 @@
 import { HorizontalBox, VerticalBox, Button, CheckBox, ScrollView } from "std-widgets.slint";
-
 import { Theme, Toggle } from "common.slint";
 
 export component AppWindow inherits Window {
@@ -14,10 +13,14 @@ export component AppWindow inherits Window {
     callback toggle-charger(bool);
 
     HorizontalLayout {
-        ScrollView {
+
+        Flickable {
+            width: parent.width * 0.75;
+            height: parent.height;
             Text {
                 text: root.text;
                 font-size: Theme.font-size-small;
+                width: parent.width;
                 wrap: TextWrap.word-wrap;
                 horizontal-alignment: left;
                 vertical-alignment: top;
@@ -25,6 +28,7 @@ export component AppWindow inherits Window {
         }
 
         VerticalLayout {
+            width: parent.width * 0.25;
             alignment: LayoutAlignment.start;
             padding: 10px;
 

@@ -1,6 +1,5 @@
-use alloc::{boxed::Box, rc::Rc};
+use alloc::rc::Rc;
 use defmt::error;
-use drivers::cst816s::TouchInput;
 use embassy_time::Timer;
 use slint::{
     platform::{
@@ -11,14 +10,15 @@ use slint::{
 };
 
 use crate::{
-    display_line_buffer::DisplayLineBuffer, RM67162Display, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+    display_line_buffer::DisplayLineBuffer, CST816STouchpad, RM67162Display, DISPLAY_HEIGHT,
+    DISPLAY_WIDTH,
 };
 
 #[embassy_executor::task()]
 pub async fn render_task(
     window: Rc<MinimalSoftwareWindow>,
     display: RM67162Display,
-    mut touchpad: Box<dyn TouchInput>,
+    mut touchpad: CST816STouchpad,
 ) {
     // Initialize buffer provider
     let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
@@ -31,7 +31,7 @@ pub async fn render_task(
         slint::platform::update_timers_and_animations();
 
         // process touchscreen events
-        process_touch(touchpad.as_mut(), &mut last_touch, window.clone());
+        process_touch(&mut touchpad, &mut last_touch, window.clone()).await;
 
         // Draw the scene if something needs to be drawn
         let is_dirty = window.draw_if_needed(|renderer| {
@@ -44,12 +44,12 @@ pub async fn render_task(
     }
 }
 
-fn process_touch(
-    touch: &mut dyn TouchInput,
+async fn process_touch(
+    touch: &mut CST816STouchpad,
     last_touch: &mut Option<LogicalPosition>,
     window: Rc<MinimalSoftwareWindow>,
 ) {
-    match touch.read_touch(true) {
+    match touch.read_touch(true).await {
         Ok(point) => {
             let button = PointerEventButton::Left;
             let event = match point {
