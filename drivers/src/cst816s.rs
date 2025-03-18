@@ -4,6 +4,8 @@
 use embedded_hal::digital::InputPin;
 use embedded_hal_async::i2c::I2c;
 
+use crate::AsynRegisterDevice;
+
 const CST816S_ADDRESS: u8 = 0x15;
 
 /// Number of bytes for a single touch event
@@ -105,7 +107,7 @@ pub struct MotionMask {
 }
 #[derive(Debug)]
 pub struct CST816S<I2C, PIN> {
-    dev: CST816SDevice<I2C>,
+    dev: AsynRegisterDevice<I2C>,
     touch_int: PIN,
 }
 
@@ -117,60 +119,61 @@ where
     /// Create a new CST816S instance
     pub fn new(i2c: I2C, touch_int: PIN) -> Self {
         Self {
-            dev: CST816SDevice::new(i2c, CST816S_ADDRESS),
+            dev: AsynRegisterDevice::new(i2c, CST816S_ADDRESS),
             touch_int,
         }
     }
 
     pub async fn enable_auto_reset(&mut self) -> Result<(), TouchSensorError> {
-        self.dev.write_register(0xFB, 0x01).await
+        let buffer = [0xFB, 0x01];
+        self.dev.write_register(&buffer).await?;
+        Ok(())
     }
 
     pub async fn get_version(&mut self) -> Result<u8, TouchSensorError> {
-        let mut buffer = [0u8; 1];
-        self.dev.read_register(0xA9, &mut buffer).await?;
-        Ok(buffer[0])
+        let result = self.dev.read_register(0xA9).await?;
+        Ok(result)
     }
 
     /// Disable auto sleep mode
     pub async fn disable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
-        self.dev.write_register(0xFE, 0x01).await
+        let buffer = [0xFE, 0x01];
+        self.dev.write_register(&buffer).await?;
+        Ok(())
     }
 
     /// Enable auto sleep mode
     pub async fn enable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
-        self.dev.write_register(0xFE, 0x00).await
+        let buffer = [0xFE, 0x00];
+        self.dev.write_register(&buffer).await?;
+        Ok(())
     }
 
     /// Set auto sleep time
     pub async fn set_auto_sleep_time(&mut self, mut seconds: i32) -> Result<(), TouchSensorError> {
         seconds = seconds.clamp(1, 255);
-
-        self.dev.write_register(0xF9, seconds as u8).await
+        let buffer = [0xF9, seconds as u8];
+        self.dev.write_register(&buffer).await?;
+        Ok(())
     }
 
     /// Reads the long press time setting from the sensor.
     pub async fn get_long_press_time(&mut self) -> Result<u8, TouchSensorError> {
-        let mut buffer = [0];
-        self.dev
-            .read_register(0xFC, &mut buffer)
-            .await
-            .map_err(|_| TouchSensorError::ReadError)?;
-        Ok(buffer[0])
+        let result = self.dev.read_register(0xFC).await?;
+        Ok(result)
     }
 
     // Add these new methods
     /// Read the current interrupt control settings
     pub async fn get_irq_control(&mut self) -> Result<IrqControl, TouchSensorError> {
-        let mut buffer = [0u8];
-        self.dev.read_register(0xFA, &mut buffer).await?;
+        let result = self.dev.read_register(0xFA).await?;
 
         Ok(IrqControl {
-            en_test: (buffer[0] & 0b1000_0000) != 0,
-            en_touch: (buffer[0] & 0b0100_0000) != 0,
-            en_change: (buffer[0] & 0b0010_0000) != 0,
-            en_motion: (buffer[0] & 0b0001_0000) != 0,
-            once_wlp: (buffer[0] & 0b0000_0001) != 0,
+            en_test: (result & 0b1000_0000) != 0,
+            en_touch: (result & 0b0100_0000) != 0,
+            en_change: (result & 0b0010_0000) != 0,
+            en_motion: (result & 0b0001_0000) != 0,
+            once_wlp: (result & 0b0000_0001) != 0,
         })
     }
 
@@ -182,7 +185,9 @@ where
             | (if control.en_motion { 0b0001_0000 } else { 0 })
             | (if control.once_wlp { 0b0000_0001 } else { 0 });
 
-        self.dev.write_register(0xFA, value).await
+        let buffer = [0xFA, value];
+        self.dev.write_register(&buffer).await?;
+        Ok(())
     }
 
     /// Writes the long press time setting to the sensor.
@@ -194,22 +199,20 @@ where
         if time > 10 {
             return Err(TouchSensorError::InvalidLongPressTime);
         }
-        self.dev
-            .write_register(0xFC, time)
-            .await
-            .map_err(|_| TouchSensorError::WriteError)?;
+
+        let buffer = [0xFC, time];
+        self.dev.write_register(&buffer).await?;
         Ok(())
     }
 
     /// Get current motion mask settings
     pub async fn get_motion_mask(&mut self) -> Result<MotionMask, TouchSensorError> {
-        let mut buffer = [0u8];
-        self.dev.read_register(0xEC, &mut buffer).await?;
+        let result = self.dev.read_register(0xEC).await?;
 
         Ok(MotionMask {
-            double_click: (buffer[0] & 0b0000_0001) != 0,
-            continuous_updown: (buffer[0] & 0b0000_0010) != 0,
-            continuous_leftright: (buffer[0] & 0b0000_0100) != 0,
+            double_click: (result & 0b0000_0001) != 0,
+            continuous_updown: (result & 0b0000_0010) != 0,
+            continuous_leftright: (result & 0b0000_0100) != 0,
         })
     }
 
@@ -227,11 +230,15 @@ where
                 0
             });
 
-        self.dev.write_register(0xEC, value).await
+        let buffer = [0xEC, value];
+        self.dev.write_register(&buffer).await?;
+        Ok(())
     }
 
-    fn is_touch_available(&mut self) -> bool {
-        self.touch_int.is_low().unwrap()
+    fn is_touch_available(&mut self) -> Result<bool, TouchSensorError> {
+        self.touch_int
+            .is_low()
+            .map_err(|_| TouchSensorError::PinError)
     }
 
     pub async fn read_touch(
@@ -239,16 +246,13 @@ where
         check_int_pin: bool,
     ) -> Result<Option<TouchData>, TouchSensorError> {
         // return if no touch detected
-        if check_int_pin && !self.is_touch_available() {
+        if check_int_pin && !self.is_touch_available()? {
             return Ok(None);
         }
 
         let mut buffer = [0u8; 13];
 
-        self.dev
-            .read_register(0x00, &mut buffer)
-            .await
-            .map_err(|_| TouchSensorError::WriteError)?;
+        self.dev.read_register_buffer(0x00, &mut buffer).await?;
 
         let gesture = Gesture::from(buffer[1]);
         let points = buffer[2] & 0x0F;
@@ -275,57 +279,21 @@ where
     }
 }
 
-#[derive(Debug)]
-struct CST816SDevice<I2C> {
-    i2c: I2C,
-    address: u8,
-}
-
-impl<I2C> CST816SDevice<I2C>
-where
-    I2C: I2c,
-{
-    fn new(i2c: I2C, adr: u8) -> Self {
-        Self { i2c, address: adr }
-    }
-
-    async fn write_register(
-        &mut self,
-        register_address: u8,
-        data: u8,
-    ) -> Result<(), TouchSensorError> {
-        let mut buffer = [0u8; 2]; // Assuming 1 byte register + 1 byte data
-        buffer[0] = register_address;
-        buffer[1] = data;
-
-        self.i2c
-            .write(self.address, &buffer)
-            .await
-            .map_err(|_| TouchSensorError::WriteError)
-    }
-
-    async fn read_register(
-        &mut self,
-        register_address: u8,
-        buffer: &mut [u8],
-    ) -> Result<(), TouchSensorError>
-    where
-        I2C: I2c,
-    {
-        self.i2c
-            .write_read(self.address, &[register_address], buffer)
-            .await
-            .map_err(|_| TouchSensorError::ReadError)?;
-        Ok(())
-    }
-}
-
 /// Errors that can occur when interacting with the BQ25896
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum TouchSensorError {
-    WriteError,
-    ReadError,
     UnknownGesture(u8),
     InvalidLongPressTime,
+    I2CError,
+    PinError,
+}
+
+impl<E> From<E> for TouchSensorError
+where
+    E: embedded_hal_async::i2c::Error,
+{
+    fn from(_: E) -> Self {
+        TouchSensorError::I2CError
+    }
 }

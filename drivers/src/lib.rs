@@ -5,6 +5,8 @@
 //! and power path management. It includes functions for configuring and
 //! monitoring the charging process.
 
+use embedded_hal_async::i2c::I2c;
+
 /// BQ25896 battery charging and power path management IC driver.
 pub mod bq25896;
 
@@ -15,6 +17,59 @@ pub mod cst816s;
 pub mod ld2410;
 
 extern crate alloc;
+
+#[derive(Debug)]
+struct AsynRegisterDevice<I2C> {
+    i2c: I2C,
+    adr: u8,
+}
+
+impl<I2C> AsynRegisterDevice<I2C>
+where
+    I2C: I2c,
+{
+    pub fn new(i2c: I2C, adr: u8) -> Self {
+        Self { i2c, adr }
+    }
+
+    pub async fn read_register_buffer(
+        &mut self,
+        register: u8,
+        buffer: &mut [u8],
+    ) -> Result<(), I2C::Error> {
+        self.i2c.write_read(self.adr, &[register], buffer).await?;
+        Ok(())
+    }
+
+    pub async fn read_register(&mut self, register: u8) -> Result<u8, I2C::Error> {
+        let mut buffer = [0];
+        self.i2c
+            .write_read(self.adr, &[register], &mut buffer)
+            .await?;
+        Ok(buffer[0])
+    }
+
+    pub async fn write_register(&mut self, register_and_data: &[u8]) -> Result<(), I2C::Error> {
+        self.i2c.write(self.adr, register_and_data).await
+    }
+
+    pub async fn set_register_bit(&mut self, register: u8, bit: u8) -> Result<(), I2C::Error> {
+        let val = self.read_register(register).await?;
+        let data = val | (1 << bit);
+        self.write_register(&[register, data]).await
+    }
+
+    pub async fn get_register_bit(&mut self, register: u8, bit: u8) -> Result<bool, I2C::Error> {
+        let val = self.read_register(register).await?;
+        Ok((val & (1 << bit)) != 0)
+    }
+
+    pub async fn clear_register_bit(&mut self, register: u8, bit: u8) -> Result<(), I2C::Error> {
+        let val = self.read_register(register).await?;
+        let data = val & !(1 << bit);
+        self.write_register(&[register, data]).await
+    }
+}
 
 #[cfg(test)]
 mod tests {
