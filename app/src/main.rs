@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use controller::Controller;
 use defmt::{error, info};
 use drivers::bq25896::BQ25896;
-use drivers::cst816s::CST816S;
+use drivers::cst816s::{IrqControl, CST816S};
 use drivers::ld2410::LD2410;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
@@ -117,7 +117,7 @@ async fn main(spawner: Spawner) {
     slint::platform::set_platform(backend).expect("set_platform failed");
 
     // Initialize the touchpad interface for user interactions
-    let touchpad = initialize_touchpad(i2c_bus, peripherals.GPIO21);
+    let touchpad = initialize_touchpad(i2c_bus, peripherals.GPIO21).await;
 
     // Initialize the display via SPI with DMA support
     let display = initialize_display(
@@ -167,11 +167,48 @@ fn initialize_i2c(i2c: I2C0, sda: GpioPin<3>, scl: GpioPin<2>) -> &'static mut I
 
 /// Configures the touch sensor driver (CST816S) by wrapping the I2C bus and input pin.
 /// Returns an instance of the touchpad driver.
-fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> Touchpad {
+async fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> Touchpad {
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
     let i2c_device = I2cDevice::new(i2c_bus);
-    CST816S::new(i2c_device, touch_pin)
+    let mut touchpad = CST816S::new(i2c_device, touch_pin);
+    touchpad
+        .set_irq_control(&IrqControl {
+            en_test: false,
+            en_touch: true,
+            en_change: true,
+            en_motion: true,
+            once_wlp: false,
+        })
+        .await
+        .expect("Failed to set IRQ control");
+    touchpad
+        .enable_auto_reset(5)
+        .await
+        .expect("Failed to enable auto-reset");
+    let irq_config = touchpad
+        .get_irq_control()
+        .await
+        .expect("Failed to get IRQ control");
+    info!("IRQ control: {:?}", irq_config);
+    let chip_id = touchpad.get_chip_id().await.expect("Failed to get chip ID");
+    info!("Touchpad chip ID: 0x{:X}", chip_id);
+    let motion_mask = touchpad
+        .get_motion_mask()
+        .await
+        .expect("Failed to get motion mask");
+    info!("Motion mask: 0x{:X}", motion_mask);
+    touchpad
+        .set_irq_pulse_width(10)
+        .await
+        .expect("Failed to set pulse width");
+    let pulse_config = touchpad
+        .get_irq_pulse_width()
+        .await
+        .expect("Failed to get pulse config");
+    info!("Pulse width: {:?}", pulse_config);
+
+    touchpad
 }
 
 /// Creates and initializes the radar sensor (LD2410) interface using UART.
