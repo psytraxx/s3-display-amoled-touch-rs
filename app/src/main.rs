@@ -185,7 +185,7 @@ async fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> T
         .get_irq_control()
         .await
         .expect("Failed to get IRQ control");
-    info!("IRQ control: {:?}", irq_config);
+    info!("IRQ control: 0x{:X}", irq_config.bits());
     let chip_id = touchpad.get_chip_id().await.expect("Failed to get chip ID");
     info!("Touchpad chip ID: {}", chip_id);
     let motion_mask = touchpad
@@ -333,28 +333,86 @@ async fn initialize_pmu(i2c_bus: &'static I2C0Bus) -> Charger {
     // Enable ADC for power measurement in the PMU
     pmu.set_adc_enabled().await.expect("set_adc_enabled failed");
 
-    // Retrieve and log the fast charge current limit
-    let fast_charge_current_limit = pmu
-        .get_fast_charge_current_limit()
-        .await
-        .expect("get_fast_charge_current_limit failed");
-    info!("Fast charge current limit: {}", fast_charge_current_limit);
+    info!(
+        "Fast charge current limit: {}",
+        pmu.get_fast_charge_current_limit()
+            .await
+            .expect("get_fast_charge_current_limit failed")
+    );
 
-    // Retrieve and log the precharge current setting
-    let precharge_current = pmu
-        .get_precharge_current()
-        .await
-        .expect("get_precharge_current failed");
-    info!("Precharge current: {}", precharge_current);
+    info!(
+        "Precharge current: {}",
+        pmu.get_precharge_current()
+            .await
+            .expect("get_precharge_current failed")
+    );
 
-    // Retrieve and log the charging target voltage
-    let charge_target_voltage = pmu
-        .get_charge_target_voltage()
-        .await
-        .expect("get_charge_target_voltage failed");
-    info!("Charge target voltage: {}", charge_target_voltage);
+    info!(
+        "Charge target voltage: {}",
+        pmu.get_charge_target_voltage()
+            .await
+            .expect("get_charge_target_voltage failed")
+    );
 
-    // Log the chip ID for debugging purposes
+    info!(
+        "Boost frequency:  {}",
+        pmu.get_boost_freq().await.expect("get_boost_freq failed")
+    );
+
+    info!(
+        "Fast charge timer: {}",
+        pmu.get_fast_charge_timer()
+            .await
+            .expect("get_fast_charge_timer failed")
+    );
+
+    info!(
+        "Termination curr.: {}mA",
+        pmu.get_termination_current()
+            .await
+            .expect("get_termination_current failed")
+    );
+
+    info!(
+        "Power down voltage: {}mV",
+        pmu.get_sys_power_down_voltage()
+            .await
+            .expect("get_sys_power_down_voltage failed")
+    );
+
+    info!(
+        "Automatic input detection: {}",
+        pmu.is_automatic_input_detection_enabled()
+            .await
+            .expect("is_automatic_input_detection_enabled failed")
+    );
+
+    info!(
+        "HIZ mode: {}",
+        pmu.is_hiz_mode().await.expect("is_hiz_mode failed")
+    );
+
+    info!(
+        "Charging safety timer: {}",
+        pmu.is_charging_safety_timer_enabled()
+            .await
+            .expect("is_charging_safety_timer_enabled failed")
+    );
+
+    info!(
+        "Input detection enabled: {}",
+        pmu.is_input_detection_enabled()
+            .await
+            .expect("is_input_detection_enabled failed")
+    );
+
+    info!(
+        "Input current optimizer: {}",
+        pmu.is_input_current_optimizer()
+            .await
+            .expect("is_input_current_optimizer failed")
+    );
+
     info!(
         "PMU chip id: {}",
         pmu.get_chip_id().await.expect("get_chip_id failed")

@@ -704,8 +704,10 @@ where
     /// * `config` - Watchdog timer configuration
     pub async fn enable_watchdog(&mut self, config: WatchdogConfig) -> Result<(), PmuSensorError> {
         let mut val = self.dev.read_register(0x07).await?;
-        val &= 0xCF;
-        let bits: u8 = config.into();
+        // Clear the 4th and 5th bits (watchdog timer setting bits)
+        val &= 0xCF; // 0xCF = 1100_1111, clears bits 4 & 5
+                     // Map the low two bits of config into bits 4-5
+        let bits: u8 = (config as u8 & 0x03) << 4;
         self.dev.write_register(&[0x07, val | bits]).await?;
         Ok(())
     }
@@ -738,8 +740,10 @@ where
     ) -> Result<(), PmuSensorError> {
         let timer: u8 = timer.into();
         let mut val = self.dev.read_register(0x07).await?;
-        val &= 0xF1;
-        val |= timer << 1;
+        // Clear the second and third bits (bit1 & bit2)
+        val &= 0xF9; // 0xF9 = 1111_1001 (clears bits 1 and 2)
+                     // Set the fast charge timer in bits 1-2
+        val |= (timer & 0x03) << 1;
         self.dev.write_register(&[0x07, val]).await?;
         Ok(())
     }
@@ -747,7 +751,7 @@ where
     /// Gets the fast charge timer
     pub async fn get_fast_charge_timer(&mut self) -> Result<FastChargeTimer, PmuSensorError> {
         let val = self.dev.read_register(0x07).await?;
-        let timer_val = (val & 0x0E) >> 1;
+        let timer_val = (val >> 1) & 0x03;
         let timer = FastChargeTimer::try_from(timer_val).expect("Invalid timer value");
         Ok(timer)
     }
@@ -1348,51 +1352,13 @@ where
             self.get_charge_target_voltage().await?
         ));
         text.push_str(&format!(
-            "Boost frequency: {}\n",
-            self.get_boost_freq().await?
-        ));
-        text.push_str(&format!(
-            "Fast charge timer: {}\n",
-            self.get_fast_charge_timer().await?
-        ));
-        text.push_str(&format!(
             "Input curr. limit: {}mA\n",
             self.get_input_current_limit().await?
-        ));
-        text.push_str(&format!(
-            "Termination curr.: {}mA\n",
-            self.get_termination_current().await?
-        ));
-        text.push_str(&format!(
-            "Power down voltage: {}mV\n",
-            self.get_sys_power_down_voltage().await?
-        ));
-        text.push_str(&format!(
-            "Pre charge curr.: {}mA\n",
-            self.get_precharge_current().await?
         ));
         text.push_str(&format!(
             "Charge curr.: {}mA\n",
             self.get_charge_current().await?
         ));
-        text.push_str(&format!("HIZ mode: {}\n", self.is_hiz_mode().await?));
-        text.push_str(&format!(
-            "Automatic input detection: {}\n",
-            self.is_automatic_input_detection_enabled().await?
-        ));
-        text.push_str(&format!(
-            "Charging safety timer: {}\n",
-            self.is_charging_safety_timer_enabled().await?
-        ));
-        text.push_str(&format!(
-            "Input det. enabled: {}\n",
-            self.is_input_detection_enabled().await?
-        ));
-        text.push_str(&format!(
-            "Input curr. optimizer: {}\n",
-            self.is_input_current_optimizer().await?
-        ));
-        text.push_str(&format!("Chip Id: {}\n", self.get_chip_id().await?));
 
         Ok(text)
     }

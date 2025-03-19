@@ -67,15 +67,6 @@ bitflags! {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for IrqControl {
-    fn format(&self, f: defmt::Formatter) {
-        self.iter_names().for_each(|name| {
-            defmt::write!(f, "{}", name);
-        });
-    }
-}
-
 impl Default for IrqControl {
     fn default() -> Self {
         // Set default to have EN_TOUCH, EN_CHANGE, and EN_MOTION enabled
@@ -297,15 +288,13 @@ where
         Ok(())
     }
 
-    pub async fn is_touch_available(&mut self) -> Result<bool, TouchSensorError> {
+    pub fn is_touch_available(&mut self) -> Result<bool, TouchSensorError> {
         self.touch_int
-            .wait_for_low()
-            .await
-            .map(|_| true)
+            .is_low()
             .map_err(|_| TouchSensorError::PinError)
     }
 
-    pub async fn read_touch(&mut self) -> Result<Option<TouchData>, TouchSensorError> {
+    pub async fn read_touch(&mut self) -> Result<TouchData, TouchSensorError> {
         let mut buffer = [0u8; 13];
 
         self.dev.read_register_buffer(0x00, &mut buffer).await?;
@@ -331,7 +320,7 @@ where
             x,
             y,
         };
-        Ok(Some(data))
+        Ok(data)
     }
 }
 

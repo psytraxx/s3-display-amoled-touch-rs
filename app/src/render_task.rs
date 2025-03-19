@@ -49,22 +49,16 @@ async fn process_touch(
     window: Rc<MinimalSoftwareWindow>,
 ) {
     // Check if a touch is available
-    let touch_available = match touch.is_touch_available().await {
-        Ok(av) => av,
-        Err(e) => {
-            error!("Error getting touch: {:?}", e);
-            return;
-        }
-    };
-
-    if !touch_available {
+    if !touch
+        .is_touch_available()
+        .expect("Touch availability check failed")
+    {
         *last_touch = None;
         return;
     }
-
     // Read the touch data
     match touch.read_touch().await {
-        Ok(Some(point)) => {
+        Ok(point) => {
             let button = PointerEventButton::Left;
             let position = LogicalPosition::new(
                 DISPLAY_WIDTH as f32 - point.x as f32,
@@ -78,17 +72,22 @@ async fn process_touch(
             };
             // Update last_touch and dispatch events
             last_touch.replace(position);
-            window.dispatch_event(event);
-        }
-        Ok(None) => {
-            if let Some(position) = last_touch.take() {
-                let button = PointerEventButton::Left;
-                window.dispatch_event(WindowEvent::PointerReleased { position, button });
-                window.dispatch_event(WindowEvent::PointerExited);
-            }
+            window
+                .try_dispatch_event(event)
+                .expect("Event dispatch failed");
         }
         Err(e) => {
             error!("Touch read error: {:?}", e);
         }
+    }
+
+    if let Some(position) = last_touch.take() {
+        let button = PointerEventButton::Left;
+        window
+            .try_dispatch_event(WindowEvent::PointerReleased { position, button })
+            .expect("Event dispatch failed");
+        window
+            .try_dispatch_event(WindowEvent::PointerExited)
+            .expect("Event dispatch failed");
     }
 }
