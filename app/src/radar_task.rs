@@ -1,10 +1,10 @@
 use defmt::info;
-use drivers::ld2410::LD2410;
-use embassy_time::{Delay, Timer};
-use esp_hal::uart::Uart;
+use embassy_time::Timer;
+
+use crate::RadarSensor;
 
 #[embassy_executor::task()]
-pub async fn radar_task(mut radar: LD2410<Uart<'static, esp_hal::Blocking>, Delay>) {
+pub async fn radar_task(mut radar: RadarSensor) {
     /*
     let version = radar
         .request_factory_reset()

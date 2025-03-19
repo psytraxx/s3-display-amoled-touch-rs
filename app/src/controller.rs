@@ -2,11 +2,11 @@ use defmt::{error, info, warn};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use slint_generated::AppWindow;
 
-use crate::BQ25896Pmu;
+use crate::Charger;
 
 pub struct Controller<'a> {
     app_window: &'a AppWindow,
-    pmu: BQ25896Pmu,
+    pmu: Charger,
 }
 
 #[derive(defmt::Format, Debug, Clone)]
@@ -20,7 +20,7 @@ type ActionChannelType = Channel<CriticalSectionRawMutex, Action, 2>;
 pub static ACTION: ActionChannelType = Channel::new();
 
 impl<'a> Controller<'a> {
-    pub fn new(app_window: &'a AppWindow, pmu: BQ25896Pmu) -> Self {
+    pub fn new(app_window: &'a AppWindow, pmu: Charger) -> Self {
         Self { app_window, pmu }
     }
 
@@ -44,27 +44,30 @@ impl<'a> Controller<'a> {
     pub async fn process_action(&mut self, action: Action) -> Result<(), ()> {
         match action {
             Action::RequestUpdate => {
-                let text = self.pmu.get_info().expect("failed to get info");
+                let text = self.pmu.get_info().await.expect("failed to get info");
                 self.app_window.set_text(text.into());
             }
             Action::ToggleCharger(state) => {
                 if state {
                     self.pmu
                         .set_charge_enabled()
+                        .await
                         .expect("set_charge_enable failed");
                 } else {
                     self.pmu
                         .set_charge_disabled()
+                        .await
                         .expect("set_charge_disabled failed");
                 }
 
                 let status = self
                     .pmu
                     .is_charge_enabled()
+                    .await
                     .expect("is_charge_enabled failed");
 
                 self.app_window.set_charging(!status);
-                let text = self.pmu.get_info().expect("failed to get info");
+                let text = self.pmu.get_info().await.expect("failed to get info");
                 self.app_window.set_text(text.into());
             }
         }

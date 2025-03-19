@@ -1,15 +1,15 @@
 use embedded_graphics_core::pixelcolor::raw::RawU16;
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
-use crate::RM67162Display;
+use crate::TouchDisplay;
 
 pub struct DisplayLineBuffer<'a> {
-    pub display: RM67162Display,
+    pub display: TouchDisplay,
     pub line_buffer: &'a mut [Rgb565Pixel],
 }
 
 impl DisplayLineBuffer<'_> {
-    pub fn new(display: RM67162Display, line_buffer: &mut [Rgb565Pixel]) -> DisplayLineBuffer<'_> {
+    pub fn new(display: TouchDisplay, line_buffer: &mut [Rgb565Pixel]) -> DisplayLineBuffer<'_> {
         DisplayLineBuffer {
             display,
             line_buffer,

@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use defmt::{debug, info, warn, Format};
 use embedded_hal::delay::DelayNs;
 use embedded_io::{Read, Write};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 // Constants
 const LD2410_BUFFER_SIZE: usize = 256;
@@ -71,28 +72,17 @@ impl TargetState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum TargetState {
     /// No target detected (value: 0x00)
-    None,
+    None = 0x00,
     /// Moving target detected (value: 0x01)
-    Moving,
+    Moving = 0x01,
     /// Stationary target detected (value: 0x02)
-    Stationary,
+    Stationary = 0x02,
     /// Both moving and stationary targets detected (value: 0x03)
-    Both,
-}
-
-impl From<u8> for TargetState {
-    fn from(value: u8) -> Self {
-        match value {
-            0x00 => TargetState::None,
-            0x01 => TargetState::Moving,
-            0x02 => TargetState::Stationary,
-            0x03 => TargetState::Both,
-            _ => TargetState::None, // Default for unknown values
-        }
-    }
+    Both = 0x03,
 }
 
 #[cfg(feature = "defmt")]
@@ -165,6 +155,7 @@ impl Format for RadarData {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Command {
     EnterConfigMode,
     ExitConfigMode,
@@ -221,12 +212,22 @@ impl Default for PollingConfig {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum LD2410Error {
-    IoError(&'static str),
+    IoError,
     InvalidHeader,
     InvalidTail,
     TooLarge(usize),
     InvalidData,
+}
+
+impl<E> From<embedded_io::ReadExactError<E>> for LD2410Error
+where
+    E: embedded_io::Error,
+{
+    fn from(_: embedded_io::ReadExactError<E>) -> Self {
+        LD2410Error::IoError
+    }
 }
 
 // Main driver struct
@@ -256,31 +257,23 @@ where
     /// Reads a data frame (header, length, payload, tail) and decodes it.
     pub fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
         let mut header = [0u8; 4];
-        self.uart
-            .read_exact(&mut header)
-            .map_err(|_| LD2410Error::IoError("Failed to read data header"))?;
+        self.uart.read_exact(&mut header)?;
         if header != DATA_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
-        self.uart
-            .read_exact(&mut len_buf)
-            .map_err(|_| LD2410Error::IoError("Failed to read data length"))?;
+        self.uart.read_exact(&mut len_buf)?;
         let len = u16::from_le_bytes(len_buf) as usize;
 
         if len > self.buf.len() {
             return Err(LD2410Error::TooLarge(len));
         }
 
-        self.uart
-            .read_exact(&mut self.buf[..len])
-            .map_err(|_| LD2410Error::IoError("Failed to read data payload"))?;
+        self.uart.read_exact(&mut self.buf[..len])?;
 
         let mut tail = [0u8; 4];
-        self.uart
-            .read_exact(&mut tail)
-            .map_err(|_| LD2410Error::IoError("Failed to read data tail"))?;
+        self.uart.read_exact(&mut tail)?;
         if tail != DATA_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
@@ -423,7 +416,7 @@ where
         let detection_distance = u16::from_le_bytes(buf[9..11].try_into().ok()?);
 
         Some(RadarData {
-            target_state: target_status.into(),
+            target_state: TargetState::try_from(target_status).expect("Invalid target state"),
             movement_target_distance,
             stationary_target_distance,
             detection_distance,
@@ -434,30 +427,22 @@ where
 
     fn read_command_frame(&mut self, expected_ack: u8) -> Result<Option<&[u8]>, LD2410Error> {
         let mut header = [0u8; 4];
-        self.uart
-            .read_exact(&mut header)
-            .map_err(|_| LD2410Error::IoError("Failed to read cmd header"))?;
+        self.uart.read_exact(&mut header)?;
         if header != CMD_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
-        self.uart
-            .read_exact(&mut len_buf)
-            .map_err(|_| LD2410Error::IoError("Failed to read cmd length"))?;
+        self.uart.read_exact(&mut len_buf)?;
         let len = u16::from_le_bytes(len_buf) as usize;
         if len > self.buf.len() {
             return Err(LD2410Error::TooLarge(len));
         }
 
-        self.uart
-            .read_exact(&mut self.buf[..len])
-            .map_err(|_| LD2410Error::IoError("Failed to read cmd payload"))?;
+        self.uart.read_exact(&mut self.buf[..len])?;
 
         let mut tail = [0u8; 4];
-        self.uart
-            .read_exact(&mut tail)
-            .map_err(|_| LD2410Error::IoError("Failed to read cmd tail"))?;
+        self.uart.read_exact(&mut tail)?;
         if tail != CMD_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
@@ -475,13 +460,13 @@ where
     fn execute_command(&mut self, command: Command) -> Result<Option<Vec<u8>>, LD2410Error> {
         self.uart
             .write_all(&CMD_HEADER)
-            .map_err(|_| LD2410Error::IoError("Failed to write header"))?;
+            .expect("Failed to write command header");
         self.uart
             .write_all(command.payload())
-            .map_err(|_| LD2410Error::IoError("Failed to write payload"))?;
+            .expect("Failed to write command payload");
         self.uart
             .write_all(&CMD_TAIL)
-            .map_err(|_| LD2410Error::IoError("Failed to write tail"))?;
+            .expect("Failed to write command tail");
 
         let expected_ack = command.expected_ack();
         let mut elapsed_ms = 0;
