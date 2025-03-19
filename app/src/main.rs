@@ -418,5 +418,12 @@ async fn initialize_pmu(i2c_bus: &'static I2C0Bus) -> Charger {
         pmu.get_chip_id().await.expect("get_chip_id failed")
     );
 
+    info!(
+        "Charge current: {}mA",
+        pmu.get_charge_current()
+            .await
+            .expect("get_charge_current failed")
+    );
+
     pmu
 }

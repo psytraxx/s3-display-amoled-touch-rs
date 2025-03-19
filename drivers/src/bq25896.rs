@@ -1236,18 +1236,23 @@ where
     /// Gets the charge current in mA when VBAT > VBATSHORT
     /// Note: If the charger is disconnected, the register retains the last value
     pub async fn get_charge_current(&mut self) -> Result<u16, PmuSensorError> {
-        // Return 0 if not charging
+        // If not charging, return 0
         if self.get_charge_status().await? == ChargeStatus::NoCharge {
             return Ok(0);
         }
 
-        // Read and validate register
+        // Read register 0x12, which contains the ADC conversion result for charge current.
         let val = self.dev.read_register(0x12).await?;
-        if val == 0 {
-            return Ok(0);
-        }
 
-        // Calculate current in mA
+        // In the C code:
+        // volt = BQ2589X_ICHGR_BASE + ((val & BQ2589X_ICHGR_MASK) >> BQ2589X_ICHGR_SHIFT) * BQ2589X_ICHGR_LSB
+        // where:
+        //    BQ2589X_ICHGR_MASK  = 0x7F
+        //    BQ2589X_ICHGR_SHIFT = 0
+        //    BQ2589X_ICHGR_BASE  = 0
+        //    BQ2589X_ICHGR_LSB   = 50
+        //
+        // Thus the current in mA is:
         let current = ((val & 0x7F) as u16) * CHG_STEP_VAL;
         Ok(current)
     }
@@ -1354,10 +1359,6 @@ where
         text.push_str(&format!(
             "Input curr. limit: {}mA\n",
             self.get_input_current_limit().await?
-        ));
-        text.push_str(&format!(
-            "Charge curr.: {}mA\n",
-            self.get_charge_current().await?
         ));
 
         Ok(text)
