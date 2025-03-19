@@ -1060,11 +1060,13 @@ checksum = "f25c0e292a7ca6d6498557ff1df68f32c99850012b6ea401cf8daf771f22ff53"
 name = "drivers"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.9.0",
  "defmt",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-io",
  "libm",
+ "num_enum",
 ]
 
 [[package]]

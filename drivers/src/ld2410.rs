@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use defmt::{debug, info, warn, Format};
 use embedded_hal::delay::DelayNs;
 use embedded_io::{Read, Write};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 // Constants
 const LD2410_BUFFER_SIZE: usize = 256;
@@ -71,28 +72,17 @@ impl TargetState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum TargetState {
     /// No target detected (value: 0x00)
-    None,
+    None = 0x00,
     /// Moving target detected (value: 0x01)
-    Moving,
+    Moving = 0x01,
     /// Stationary target detected (value: 0x02)
-    Stationary,
+    Stationary = 0x02,
     /// Both moving and stationary targets detected (value: 0x03)
-    Both,
-}
-
-impl From<u8> for TargetState {
-    fn from(value: u8) -> Self {
-        match value {
-            0x00 => TargetState::None,
-            0x01 => TargetState::Moving,
-            0x02 => TargetState::Stationary,
-            0x03 => TargetState::Both,
-            _ => TargetState::None, // Default for unknown values
-        }
-    }
+    Both = 0x03,
 }
 
 #[cfg(feature = "defmt")]
@@ -426,7 +416,7 @@ where
         let detection_distance = u16::from_le_bytes(buf[9..11].try_into().ok()?);
 
         Some(RadarData {
-            target_state: target_status.into(),
+            target_state: TargetState::try_from(target_status).expect("Invalid target state"),
             movement_target_distance,
             stationary_target_distance,
             detection_distance,

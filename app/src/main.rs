@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use controller::Controller;
 use defmt::{error, info};
 use drivers::bq25896::BQ25896;
-use drivers::cst816s::{IrqControl, CST816S};
+use drivers::cst816x::{CST816x, IrqControl};
 use drivers::ld2410::LD2410;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
@@ -77,7 +77,7 @@ pub type Charger = BQ25896<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>
 
 pub type RadarSensor = LD2410<Uart<'static, Async>, Delay>;
 
-pub type Touchpad = CST816S<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>, Input<'static>>;
+pub type Touchpad = CST816x<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>, Input<'static>>;
 
 /// Main entry point for the application
 #[main]
@@ -171,15 +171,10 @@ async fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> T
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
     let i2c_device = I2cDevice::new(i2c_bus);
-    let mut touchpad = CST816S::new(i2c_device, touch_pin);
+    let mut touchpad = CST816x::new(i2c_device, touch_pin);
+    let irq_config = IrqControl::EN_TOUCH | IrqControl::EN_CHANGE | IrqControl::EN_MOTION;
     touchpad
-        .set_irq_control(&IrqControl {
-            en_test: false,
-            en_touch: true,
-            en_change: true,
-            en_motion: true,
-            once_wlp: false,
-        })
+        .set_irq_control(&irq_config)
         .await
         .expect("Failed to set IRQ control");
     touchpad
@@ -192,7 +187,7 @@ async fn initialize_touchpad(i2c_bus: &'static I2C0Bus, touch: GpioPin<21>) -> T
         .expect("Failed to get IRQ control");
     info!("IRQ control: {:?}", irq_config);
     let chip_id = touchpad.get_chip_id().await.expect("Failed to get chip ID");
-    info!("Touchpad chip ID: 0x{:X}", chip_id);
+    info!("Touchpad chip ID: {}", chip_id);
     let motion_mask = touchpad
         .get_motion_mask()
         .await

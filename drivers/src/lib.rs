@@ -11,7 +11,7 @@ use embedded_hal_async::i2c::I2c;
 pub mod bq25896;
 
 /// CST816S capacitive touch sensor driver.
-pub mod cst816s;
+pub mod cst816x;
 
 /// LD2410 radar sensor driver.
 pub mod ld2410;

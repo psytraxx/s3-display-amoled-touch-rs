@@ -18,3 +18,5 @@ libm = "0.2.11"
 defmt = { version = "0.3.8", optional = true }
 embedded-hal = { version = "1.0.0" }
 embedded-hal-async = { version = "1.0.0", features = ["defmt-03"] }
+bitflags = "2.9.0"
+num_enum = { version = "0.7.3", default-features = false }

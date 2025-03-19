@@ -48,32 +48,43 @@ async fn process_touch(
     last_touch: &mut Option<LogicalPosition>,
     window: Rc<MinimalSoftwareWindow>,
 ) {
-    match touch.read_touch(true).await {
-        Ok(point) => {
-            let button = PointerEventButton::Left;
-            let event = match point {
-                Some(point) => {
-                    let position = LogicalPosition::new(
-                        DISPLAY_WIDTH as f32 - point.x as f32,
-                        DISPLAY_HEIGHT as f32 - point.y as f32,
-                    );
-                    Some(match last_touch.replace(position) {
-                        Some(_) => WindowEvent::PointerMoved { position },
-                        None => WindowEvent::PointerPressed { position, button },
-                    })
-                }
-                None => last_touch
-                    .take()
-                    .map(|position| WindowEvent::PointerReleased { position, button }),
-            };
+    // Check if a touch is available
+    let touch_available = match touch.is_touch_available().await {
+        Ok(av) => av,
+        Err(e) => {
+            error!("Error getting touch: {:?}", e);
+            return;
+        }
+    };
 
-            if let Some(event) = event {
-                let is_pointer_release_event = matches!(event, WindowEvent::PointerReleased { .. });
-                window.dispatch_event(event);
-                // removes hover state on widgets
-                if is_pointer_release_event {
-                    window.dispatch_event(WindowEvent::PointerExited);
-                }
+    if !touch_available {
+        *last_touch = None;
+        return;
+    }
+
+    // Read the touch data
+    match touch.read_touch().await {
+        Ok(Some(point)) => {
+            let button = PointerEventButton::Left;
+            let position = LogicalPosition::new(
+                DISPLAY_WIDTH as f32 - point.x as f32,
+                DISPLAY_HEIGHT as f32 - point.y as f32,
+            );
+            // Determine event based on whether we had a previous touch
+            let event = if last_touch.is_some() {
+                WindowEvent::PointerMoved { position }
+            } else {
+                WindowEvent::PointerPressed { position, button }
+            };
+            // Update last_touch and dispatch events
+            last_touch.replace(position);
+            window.dispatch_event(event);
+        }
+        Ok(None) => {
+            if let Some(position) = last_touch.take() {
+                let button = PointerEventButton::Left;
+                window.dispatch_event(WindowEvent::PointerReleased { position, button });
+                window.dispatch_event(WindowEvent::PointerExited);
             }
         }
         Err(e) => {

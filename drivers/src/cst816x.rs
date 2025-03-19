@@ -1,6 +1,8 @@
 // https://github.com/fbiego/CST816S
+use bitflags::bitflags;
 use embedded_hal::digital::InputPin;
-use embedded_hal_async::i2c::I2c;
+use embedded_hal_async::{digital::Wait, i2c::I2c};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::AsynRegisterDevice;
 
@@ -9,7 +11,8 @@ const CST816S_ADDRESS: u8 = 0x15;
 /// Number of bytes for a single touch event
 pub const RAW_TOUCH_EVENT_LEN: usize = 6;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Gesture {
     None = 0x00,
@@ -22,23 +25,8 @@ pub enum Gesture {
     LongPress = 0x0C,
 }
 
-impl From<u8> for Gesture {
-    fn from(value: u8) -> Self {
-        match value {
-            0x00 => Gesture::None,
-            0x01 => Gesture::SwipeUp,
-            0x02 => Gesture::SwipeDown,
-            0x03 => Gesture::SwipeLeft,
-            0x04 => Gesture::SwipeRight,
-            0x05 => Gesture::SingleClick,
-            0x0B => Gesture::DoubleClick,
-            0x0C => Gesture::LongPress,
-            _ => Gesture::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Event {
     Down = 0,
@@ -46,15 +34,12 @@ pub enum Event {
     Contact = 2,
 }
 
-impl From<u8> for Event {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => Event::Down,
-            1 => Event::Up,
-            2 => Event::Contact,
-            _ => panic!("Unknown event: {}", value),
-        }
-    }
+#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ChipID {
+    CST816S = 0xB4,
+    CST816T = 0xB5,
 }
 
 #[derive(Debug)]
@@ -67,54 +52,66 @@ pub struct TouchData {
     pub y: u16,
 }
 
-// Add after existing enums
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct IrqControl {
-    /// Bit 7: EnTest (Enable test, periodically sends low pulses)
-    pub en_test: bool,
-    /// Bit 6: EnTouch (Sends low pulse on touch detection)
-    pub en_touch: bool,
-    /// Bit 5: EnChange (Sends low pulse on touch state change
-    pub en_change: bool,
-    /// Bit 4:  Bit 4: EnMotion (Sends low pulse on gesture detection)
-    pub en_motion: bool,
-    /// Bit 0: OnceWLP (Sends one low pulse on long press)
-    pub once_wlp: bool,
+bitflags! {
+    pub struct IrqControl: u8 {
+        /// Bit 7: EnTest (Enable test, periodically sends low pulses)
+        const EN_TEST   = 1 << 7;
+        /// Bit 6: EnTouch (Sends low pulse on touch detection)
+        const EN_TOUCH  = 1 << 6;
+        /// Bit 5: EnChange (Sends low pulse on touch state change)
+        const EN_CHANGE = 1 << 5;
+        /// Bit 4: EnMotion (Sends low pulse on gesture detection)
+        const EN_MOTION = 1 << 4;
+        /// Bit 0: OnceWLP (Sends one low pulse on long press)
+        const ONCE_WLP  = 1 << 0;
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for IrqControl {
+    fn format(&self, f: defmt::Formatter) {
+        self.iter_names().for_each(|name| {
+            defmt::write!(f, "{}", name);
+        });
+    }
 }
 
 impl Default for IrqControl {
     fn default() -> Self {
-        Self {
-            en_test: false,
-            en_touch: true,
-            en_change: true,
-            en_motion: true,
-            once_wlp: false,
-        }
+        // Set default to have EN_TOUCH, EN_CHANGE, and EN_MOTION enabled
+        IrqControl::EN_TOUCH | IrqControl::EN_CHANGE | IrqControl::EN_MOTION
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct MotionMask {
-    /// Enable double-click detection
-    pub double_click: bool,
-    /// Enable continuous up/down swipe
-    pub continuous_updown: bool,
-    /// Enable continuous left/right swipe
-    pub continuous_leftright: bool,
+bitflags! {
+    #[derive(Default)]
+    pub struct MotionMask: u8 {
+        /// Enable double-click detection
+        const DOUBLE_CLICK = 1 << 0;
+        /// Enable continuous up/down swipe
+        const CONTINUOUS_UPDOWN = 1 << 1;
+        /// Enable continuous left/right swipe
+        const CONTINUOUS_LEFTRIGHT = 1 << 2;
+    }
+}
+#[cfg(feature = "defmt")]
+impl defmt::Format for MotionMask {
+    fn format(&self, f: defmt::Formatter) {
+        self.iter_names().for_each(|name| {
+            defmt::write!(f, "{}", name);
+        });
+    }
 }
 #[derive(Debug)]
-pub struct CST816S<I2C, PIN> {
+pub struct CST816x<I2C, PIN> {
     dev: AsynRegisterDevice<I2C>,
     touch_int: PIN,
 }
 
-impl<I2C, PIN> CST816S<I2C, PIN>
+impl<I2C, PIN> CST816x<I2C, PIN>
 where
     I2C: I2c,
-    PIN: InputPin,
+    PIN: InputPin + Wait,
 {
     /// Create a new CST816S instance
     pub fn new(i2c: I2C, touch_int: PIN) -> Self {
@@ -145,8 +142,9 @@ where
         Ok(result)
     }
 
-    pub async fn get_chip_id(&mut self) -> Result<u8, TouchSensorError> {
+    pub async fn get_chip_id(&mut self) -> Result<ChipID, TouchSensorError> {
         let result = self.dev.read_register(0xA7).await?;
+        let result = ChipID::try_from(result).expect("Unknown chip ID");
         Ok(result)
     }
 
@@ -240,14 +238,7 @@ where
     /// Read the current interrupt control settings
     pub async fn get_irq_control(&mut self) -> Result<IrqControl, TouchSensorError> {
         let result = self.dev.read_register(0xFA).await?;
-
-        Ok(IrqControl {
-            en_test: (result & (1 << 7)) != 0,   // Bit 7
-            en_touch: (result & (1 << 6)) != 0,  // Bit 6
-            en_change: (result & (1 << 5)) != 0, // Bit 5
-            en_motion: (result & (1 << 4)) != 0, // Bit 4
-            once_wlp: (result & (1 << 0)) != 0,  // Bit 0
-        })
+        Ok(IrqControl::from_bits_truncate(result))
     }
 
     /// Write interrupt control settings
@@ -259,13 +250,7 @@ where
     /// - Bit 4: EnMotion (Sends low pulse on gesture detection)
     /// - Bit 0: OnceWLP (Sends one low pulse on long press)
     pub async fn set_irq_control(&mut self, control: &IrqControl) -> Result<(), TouchSensorError> {
-        let value = (if control.en_test { 1 << 7 } else { 0 })
-            | (if control.en_touch { 1 << 6 } else { 0 })
-            | (if control.en_change { 1 << 5 } else { 0 })
-            | (if control.en_motion { 1 << 4 } else { 0 })
-            | (if control.once_wlp { 1 << 0 } else { 0 });
-
-        let buffer = [0xFA, value];
+        let buffer = [0xFA, control.bits()];
         self.dev.write_register(&buffer).await?;
         Ok(())
     }
@@ -293,11 +278,7 @@ where
     /// - Bit 2: EnConLR (enable continuous left/right swipe)
     pub async fn get_motion_mask(&mut self) -> Result<MotionMask, TouchSensorError> {
         let result = self.dev.read_register(0xEC).await?;
-        Ok(MotionMask {
-            double_click: (result & (1 << 0)) != 0,      // Bit 0: EnDClick
-            continuous_updown: (result & (1 << 1)) != 0, // Bit 1: EnConUD
-            continuous_leftright: (result & (1 << 2)) != 0, // Bit 2: EnConLR
-        })
+        Ok(MotionMask::from_bits_truncate(result))
     }
 
     /// Set motion mask settings to register 0xEC
@@ -311,36 +292,25 @@ where
     ///
     /// * `mask` - A `MotionMask` struct specifying which gestures to enable.
     pub async fn set_motion_mask(&mut self, mask: &MotionMask) -> Result<(), TouchSensorError> {
-        // Use bit shifting and bitwise OR to combine the flags into a single value
-        let value = (if mask.double_click { 1 << 0 } else { 0 })
-            | (if mask.continuous_updown { 1 << 1 } else { 0 })
-            | (if mask.continuous_leftright { 1 << 2 } else { 0 });
-
-        let buffer = [0xEC, value];
+        let buffer = [0xEC, mask.bits()];
         self.dev.write_register(&buffer).await?;
         Ok(())
     }
 
-    fn is_touch_available(&mut self) -> Result<bool, TouchSensorError> {
+    pub async fn is_touch_available(&mut self) -> Result<bool, TouchSensorError> {
         self.touch_int
-            .is_low()
+            .wait_for_low()
+            .await
+            .map(|_| true)
             .map_err(|_| TouchSensorError::PinError)
     }
 
-    pub async fn read_touch(
-        &mut self,
-        check_int_pin: bool,
-    ) -> Result<Option<TouchData>, TouchSensorError> {
-        // return if no touch detected
-        if check_int_pin && !self.is_touch_available()? {
-            return Ok(None);
-        }
-
+    pub async fn read_touch(&mut self) -> Result<Option<TouchData>, TouchSensorError> {
         let mut buffer = [0u8; 13];
 
         self.dev.read_register_buffer(0x00, &mut buffer).await?;
 
-        let gesture = Gesture::from(buffer[1]);
+        let gesture = Gesture::try_from(buffer[1]).expect("Unknown gesture");
         let points = buffer[2] & 0x0F;
 
         let x_high = buffer[3] & 0x0f;
@@ -352,7 +322,7 @@ where
         let x: u16 = (u16::from(x_high) << 8) | u16::from(x_low);
         let y: u16 = (u16::from(y_high) << 8) | u16::from(y_low);
 
-        let event = Event::from(buffer[3] >> 6);
+        let event = Event::try_from(buffer[3] >> 6).expect("Unknown event");
 
         let data = TouchData {
             gesture,

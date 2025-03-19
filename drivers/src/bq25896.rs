@@ -2,6 +2,7 @@ use alloc::{format, string::String};
 use core::fmt::{self, Display, Formatter};
 use embedded_hal_async::i2c::I2c;
 use libm::{log, round};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::AsynRegisterDevice;
 /// <https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series/blob/master/libdeps/XPowersLib/src/PowersBQ25896.tpp>
@@ -704,11 +705,7 @@ where
     pub async fn enable_watchdog(&mut self, config: WatchdogConfig) -> Result<(), PmuSensorError> {
         let mut val = self.dev.read_register(0x07).await?;
         val &= 0xCF;
-        let bits = match config {
-            WatchdogConfig::TimerOut40Sec => 0x10,
-            WatchdogConfig::TimerOut80Sec => 0x20,
-            WatchdogConfig::TimerOut160Sec => 0x30,
-        };
+        let bits: u8 = config.into();
         self.dev.write_register(&[0x07, val | bits]).await?;
         Ok(())
     }
@@ -739,9 +736,10 @@ where
         &mut self,
         timer: FastChargeTimer,
     ) -> Result<(), PmuSensorError> {
+        let timer: u8 = timer.into();
         let mut val = self.dev.read_register(0x07).await?;
         val &= 0xF1;
-        val |= (timer as u8) << 1;
+        val |= timer << 1;
         self.dev.write_register(&[0x07, val]).await?;
         Ok(())
     }
@@ -750,12 +748,8 @@ where
     pub async fn get_fast_charge_timer(&mut self) -> Result<FastChargeTimer, PmuSensorError> {
         let val = self.dev.read_register(0x07).await?;
         let timer_val = (val & 0x0E) >> 1;
-        Ok(match timer_val {
-            0 => FastChargeTimer::Hours5,
-            1 => FastChargeTimer::Hours8,
-            2 => FastChargeTimer::Hours12,
-            _ => FastChargeTimer::Hours20,
-        })
+        let timer = FastChargeTimer::try_from(timer_val).expect("Invalid timer value");
+        Ok(timer)
     }
 
     /// Sets the JEITA low temperature current
@@ -824,9 +818,10 @@ where
         &mut self,
         threshold: ThermalRegThreshold,
     ) -> Result<(), PmuSensorError> {
+        let threshold: u8 = threshold.into();
         let mut val = self.dev.read_register(0x08).await?;
         val &= 0xFC;
-        val |= threshold as u8;
+        val |= threshold;
         self.dev.write_register(&[0x08, val]).await?;
         Ok(())
     }
@@ -977,9 +972,10 @@ where
         &mut self,
         limit: BoostCurrentLimit,
     ) -> Result<(), PmuSensorError> {
+        let limit: u8 = limit.into();
         let val = self.dev.read_register(0x0A).await?;
-        let new_val = (val & 0x03) | (limit as u8);
-        self.dev.write_register(&[0x0A, new_val]).await?;
+        let bits = (val & 0x03) | limit;
+        self.dev.write_register(&[0x0A, bits]).await?;
         Ok(())
     }
 
@@ -1003,7 +999,8 @@ where
     pub async fn get_charge_status(&mut self) -> Result<ChargeStatus, PmuSensorError> {
         let val = self.dev.read_register(0x0B).await?;
         let result = (val >> 3) & 0x03;
-        Ok(result.into())
+        let result = ChargeStatus::try_from(result).expect("Invalid charge status");
+        Ok(result)
     }
 
     /// Checks if VBUS is present
@@ -1037,7 +1034,8 @@ where
     pub async fn get_bus_status(&mut self) -> Result<BusStatus, PmuSensorError> {
         let val = self.dev.read_register(0x0B).await?;
         let result = (val >> 5) & 0x07;
-        Ok(result.into())
+        let result = BusStatus::try_from(result).expect("Invalid bus status");
+        Ok(result)
     }
 
     // REGISTER 0x0C TODO
@@ -1059,13 +1057,8 @@ where
     pub async fn get_charge_fault(&mut self) -> Result<ChargeFaultStatus, PmuSensorError> {
         let val = self.dev.read_register(0x0C).await?;
         let fault = (val >> 4) & 0x03;
-        Ok(match fault {
-            0 => ChargeFaultStatus::Normal,
-            1 => ChargeFaultStatus::InputFault,
-            2 => ChargeFaultStatus::ThermalShutdown,
-            3 => ChargeFaultStatus::SafetyTimer,
-            _ => ChargeFaultStatus::Normal,
-        })
+        let fault = ChargeFaultStatus::try_from(fault).expect("Invalid charge fault status");
+        Ok(fault)
     }
 
     /// Checks the battery fault status
@@ -1195,8 +1188,8 @@ where
         // Convert percentage to resistance ratio
         let r_ratio = (100.0 - ntc_percent) / ntc_percent;
 
-        /// Converts NTC thermistor resistance ratio to temperature
-        /// using Steinhart-Hart equation
+        // Converts NTC thermistor resistance ratio to temperature
+        // using Steinhart-Hart equation
         fn r_to_temp(r: f64) -> f64 {
             const BETA: f64 = 3950.0; // Beta value for typical 10k NTC
             const T0: f64 = 298.15; // 25°C in Kelvin
@@ -1442,19 +1435,18 @@ where
     }
 }
 /// Status of the power input source
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u8)]
 pub enum BusStatus {
     /// No power input connected
-    NoInput,
+    NoInput = 0,
     /// Standard USB host (500mA max)
-    UsbSdp,
+    UsbSdp = 1,
     /// AC/DC power adapter
-    Adapter,
+    Adapter = 2,
     /// USB OTG mode - device is power source
-    Otg,
-    /// Unknown input status
-    Unknown,
+    Otg = 3,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1478,15 +1470,17 @@ pub enum RechargeThresholdOffset {
     Offset200mV,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WatchdogConfig {
-    TimerOut40Sec,
-    TimerOut80Sec,
-    TimerOut160Sec,
+    TimerOut40Sec = 0x10,
+    TimerOut80Sec = 0x20,
+    TimerOut160Sec = 0x30,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum FastChargeTimer {
     Hours5 = 0,
@@ -1502,7 +1496,8 @@ pub enum JeitaLowTemperatureCurrent {
     Temp20,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ThermalRegThreshold {
     Celsius60 = 0,
@@ -1511,7 +1506,7 @@ pub enum ThermalRegThreshold {
     Celsius120 = 3,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum BoostCurrentLimit {
@@ -1524,7 +1519,8 @@ pub enum BoostCurrentLimit {
     Limit2150mA = 0x06,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum NtcBoostStatus {
     Normal = 0,
@@ -1532,7 +1528,8 @@ enum NtcBoostStatus {
     Hot = 2,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum NtcBuckStatus {
     Normal = 0,
@@ -1542,7 +1539,8 @@ enum NtcBuckStatus {
     Hot = 6,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ChargeFaultStatus {
     Normal = 0x00,
@@ -1558,7 +1556,6 @@ impl Display for BusStatus {
             BusStatus::UsbSdp => write!(f, "USB Host SDP"),
             BusStatus::Adapter => write!(f, "Adapter"),
             BusStatus::Otg => write!(f, "OTG"),
-            BusStatus::Unknown => write!(f, "Unknown"),
         }
     }
 }
@@ -1583,19 +1580,8 @@ impl Display for BoostFreq {
     }
 }
 
-impl From<u8> for BusStatus {
-    fn from(val: u8) -> Self {
-        match val {
-            0 => BusStatus::NoInput,
-            1 => BusStatus::UsbSdp,  // Standard USB port (500mA max)
-            2 => BusStatus::Adapter, // AC/DC power adapter
-            3 => BusStatus::Otg,     // On-The-Go -it powers other devices on usb
-            _ => BusStatus::Unknown,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ChargeStatus {
     NoCharge,
@@ -1617,20 +1603,9 @@ impl Display for ChargeStatus {
     }
 }
 
-impl From<u8> for ChargeStatus {
-    fn from(val: u8) -> Self {
-        match val {
-            0 => ChargeStatus::NoCharge,
-            1 => ChargeStatus::PreCharge,
-            2 => ChargeStatus::FastCharge,
-            3 => ChargeStatus::Done,
-            _ => ChargeStatus::Unknown,
-        }
-    }
-}
-
 /// Boost mode hot temperature monitor threshold
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum BoostHotThreshold {
     VBHOT1 = 0x00,   // Threshold (34.75%) (default)
@@ -1639,7 +1614,8 @@ pub enum BoostHotThreshold {
     Disabled = 0x03, // Disable boost mode thermal protection
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum BoostColdThreshold {
     VBCOLD0 = 0x00, // (Typ. 77%) (default)
