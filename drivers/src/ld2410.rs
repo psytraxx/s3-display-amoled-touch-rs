@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 #[cfg(feature = "defmt")]
 use defmt::{debug, info, warn, Format};
-use embedded_hal::delay::DelayNs;
-use embedded_io::{Read, Write};
+use embedded_hal_async::delay::DelayNs;
+use embedded_io_async::{Error, Read, ReadExactError, Write};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 // Constants
@@ -221,17 +221,17 @@ pub enum LD2410Error {
     InvalidData,
 }
 
-impl<E> From<embedded_io::ReadExactError<E>> for LD2410Error
+impl<E> From<ReadExactError<E>> for LD2410Error
 where
-    E: embedded_io::Error,
+    E: Error,
 {
-    fn from(_: embedded_io::ReadExactError<E>) -> Self {
+    fn from(_: ReadExactError<E>) -> Self {
         LD2410Error::IoError
     }
 }
 
 // Main driver struct
-pub struct LD2410<UART, DELAY: DelayNs> {
+pub struct LD2410<UART, DELAY> {
     uart: UART,
     buf: [u8; LD2410_BUFFER_SIZE],
     delay: DELAY,
@@ -239,9 +239,10 @@ pub struct LD2410<UART, DELAY: DelayNs> {
 }
 
 // Implementation
-impl<UART, DELAY: DelayNs> LD2410<UART, DELAY>
+impl<UART, DELAY> LD2410<UART, DELAY>
 where
     UART: Read + Write,
+    DELAY: DelayNs,
 {
     // Constructor
     pub fn new(uart: UART, delay: DELAY) -> Self {
@@ -255,25 +256,25 @@ where
 
     // Public API
     /// Reads a data frame (header, length, payload, tail) and decodes it.
-    pub fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
+    pub async fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
         let mut header = [0u8; 4];
-        self.uart.read_exact(&mut header)?;
+        self.uart.read_exact(&mut header).await?;
         if header != DATA_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
-        self.uart.read_exact(&mut len_buf)?;
+        self.uart.read_exact(&mut len_buf).await?;
         let len = u16::from_le_bytes(len_buf) as usize;
 
         if len > self.buf.len() {
             return Err(LD2410Error::TooLarge(len));
         }
 
-        self.uart.read_exact(&mut self.buf[..len])?;
+        self.uart.read_exact(&mut self.buf[..len]).await?;
 
         let mut tail = [0u8; 4];
-        self.uart.read_exact(&mut tail)?;
+        self.uart.read_exact(&mut tail).await?;
         if tail != DATA_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
@@ -281,8 +282,11 @@ where
         Ok(self.decode_data_frame(&self.buf[..len]))
     }
 
-    pub fn get_firmware_version(&mut self) -> Result<Option<FirmwareVersion>, LD2410Error> {
-        self.with_configuration_mode(|this| this.execute_command(Command::RequestFirmware))
+    pub async fn get_firmware_version(&mut self) -> Result<Option<FirmwareVersion>, LD2410Error> {
+        self.enter_configuration_mode().await?;
+        let result = self
+            .execute_command(Command::RequestFirmware)
+            .await
             .map(|opt_data| {
                 opt_data.and_then(|data| {
                     if data.len() < 8 {
@@ -299,80 +303,82 @@ where
                         bugfix,
                     })
                 })
-            })
+            })?;
+        self.leave_configuration_mode().await?;
+        Ok(result)
     }
 
-    pub fn request_restart(&mut self) -> Result<bool, LD2410Error> {
-        self.with_configuration_mode(|this| {
-            let res = this.execute_command(Command::RequestRestart)?;
-            if res.is_some() {
-                #[cfg(feature = "defmt")]
-                info!("Restart request successful");
-                this.delay.delay_ms(50);
-            }
-            Ok(res)
-        })
-        .map(|opt| opt.is_some())
+    pub async fn request_restart(&mut self) -> Result<bool, LD2410Error> {
+        self.enter_configuration_mode().await?;
+        let result = self
+            .execute_command(Command::RequestRestart)
+            .await?
+            .is_some();
+
+        self.leave_configuration_mode().await?;
+        Ok(result)
     }
 
-    pub fn request_factory_reset(&mut self) -> Result<bool, LD2410Error> {
-        self.with_configuration_mode(|this| {
-            let res = this.execute_command(Command::RequestFactoryReset)?;
-            if res.is_some() {
-                #[cfg(feature = "defmt")]
-                info!("Factory reset request successful");
-                this.delay.delay_ms(50);
-            } else {
-                #[cfg(feature = "defmt")]
-                warn!("Factory reset request failed");
-            }
-            Ok(res)
-        })
-        .map(|opt| opt.is_some())
+    pub async fn request_factory_reset(&mut self) -> Result<bool, LD2410Error> {
+        self.enter_configuration_mode().await?;
+        let result = self
+            .execute_command(Command::RequestFactoryReset)
+            .await?
+            .is_some();
+
+        self.leave_configuration_mode().await?;
+        Ok(result)
     }
 
-    pub fn get_configuration(&mut self) -> Result<Option<RadarConfiguration>, LD2410Error> {
-        self.with_configuration_mode(|this| this.execute_command(Command::RequestCurrentConfig))
-            .map(|opt_data| {
-                opt_data.and_then(|data| {
-                    // Safe bounds checking
-                    if data.len() < 24 {
-                        return None;
-                    }
+    pub async fn get_configuration(&mut self) -> Result<Option<RadarConfiguration>, LD2410Error> {
+        self.enter_configuration_mode().await?;
 
-                    // Safely convert slices to arrays
-                    let motion_sensitivity = match data.get(4..13).and_then(|s| s.try_into().ok()) {
-                        Some(array) => array,
-                        None => return None,
-                    };
+        let result = self
+            .execute_command(Command::RequestCurrentConfig)
+            .await?
+            .and_then(|data| {
+                // Safe bounds checking
+                if data.len() < 24 {
+                    return None;
+                }
 
-                    let stationary_sensitivity =
-                        match data.get(13..22).and_then(|s| s.try_into().ok()) {
-                            Some(array) => array,
-                            None => return None,
-                        };
+                // Safely convert slices to arrays
+                let motion_sensitivity = match data.get(4..13).and_then(|s| s.try_into().ok()) {
+                    Some(array) => array,
+                    None => return None,
+                };
 
-                    let idle_time_bytes = match data.get(22..24).and_then(|s| s.try_into().ok()) {
-                        Some(array) => array,
-                        None => return None,
-                    };
+                let stationary_sensitivity = match data.get(13..22).and_then(|s| s.try_into().ok())
+                {
+                    Some(array) => array,
+                    None => return None,
+                };
 
-                    Some(RadarConfiguration {
-                        max_gate: data[1],
-                        max_moving_gate: data[2],
-                        max_stationary_gate: data[3],
-                        motion_sensitivity,
-                        stationary_sensitivity,
-                        sensor_idle_time: u16::from_le_bytes(idle_time_bytes),
-                    })
+                let idle_time_bytes = match data.get(22..24).and_then(|s| s.try_into().ok()) {
+                    Some(array) => array,
+                    None => return None,
+                };
+
+                Some(RadarConfiguration {
+                    max_gate: data[1],
+                    max_moving_gate: data[2],
+                    max_stationary_gate: data[3],
+                    motion_sensitivity,
+                    stationary_sensitivity,
+                    sensor_idle_time: u16::from_le_bytes(idle_time_bytes),
                 })
-            })
+            });
+
+        self.leave_configuration_mode().await?;
+        Ok(result)
     }
 
     /// Requests to enter engineering mode.
-    pub fn request_start_engineering_mode(&mut self) -> Result<bool, LD2410Error> {
+    pub async fn request_start_engineering_mode(&mut self) -> Result<bool, LD2410Error> {
         // Execute the engineering command directly without changing configuration mode.
-        let res = self.execute_command(Command::RequestStartEngineeringMode)?;
+        let res = self
+            .execute_command(Command::RequestStartEngineeringMode)
+            .await?;
         #[cfg(feature = "defmt")]
         {
             if res.is_some() {
@@ -385,9 +391,11 @@ where
     }
 
     /// Requests to exit engineering mode.
-    pub fn request_end_engineering_mode(&mut self) -> Result<bool, LD2410Error> {
+    pub async fn request_end_engineering_mode(&mut self) -> Result<bool, LD2410Error> {
         // Execute the engineering command directly without changing configuration mode.
-        let res = self.execute_command(Command::RequestEndEngineeringMode)?;
+        let res = self
+            .execute_command(Command::RequestEndEngineeringMode)
+            .await?;
         #[cfg(feature = "defmt")]
         {
             if res.is_some() {
@@ -425,24 +433,24 @@ where
         })
     }
 
-    fn read_command_frame(&mut self, expected_ack: u8) -> Result<Option<&[u8]>, LD2410Error> {
+    async fn read_command_frame(&mut self, expected_ack: u8) -> Result<Option<&[u8]>, LD2410Error> {
         let mut header = [0u8; 4];
-        self.uart.read_exact(&mut header)?;
+        self.uart.read_exact(&mut header).await?;
         if header != CMD_HEADER {
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
-        self.uart.read_exact(&mut len_buf)?;
+        self.uart.read_exact(&mut len_buf).await?;
         let len = u16::from_le_bytes(len_buf) as usize;
         if len > self.buf.len() {
             return Err(LD2410Error::TooLarge(len));
         }
 
-        self.uart.read_exact(&mut self.buf[..len])?;
+        self.uart.read_exact(&mut self.buf[..len]).await?;
 
         let mut tail = [0u8; 4];
-        self.uart.read_exact(&mut tail)?;
+        self.uart.read_exact(&mut tail).await?;
         if tail != CMD_TAIL {
             return Err(LD2410Error::InvalidTail);
         }
@@ -457,31 +465,37 @@ where
         Ok(None)
     }
 
-    fn execute_command(&mut self, command: Command) -> Result<Option<Vec<u8>>, LD2410Error> {
+    async fn execute_command(&mut self, command: Command) -> Result<Option<Vec<u8>>, LD2410Error> {
         self.uart
             .write_all(&CMD_HEADER)
+            .await
             .expect("Failed to write command header");
         self.uart
             .write_all(command.payload())
+            .await
             .expect("Failed to write command payload");
         self.uart
             .write_all(&CMD_TAIL)
+            .await
             .expect("Failed to write command tail");
 
         let expected_ack = command.expected_ack();
         let mut elapsed_ms = 0;
         while elapsed_ms < self.config.timeout_ms {
-            self.delay.delay_ms(self.config.delay_ms);
+            self.delay.delay_ms(self.config.delay_ms).await;
             elapsed_ms += self.config.delay_ms;
-            if let Ok(Some(data)) = self.read_command_frame(expected_ack) {
+            if let Ok(Some(data)) = self.read_command_frame(expected_ack).await {
                 return Ok(Some(data.to_vec()));
             }
         }
         Ok(None)
     }
 
-    fn enter_configuration_mode(&mut self) -> Result<bool, LD2410Error> {
-        let entered = self.execute_command(Command::EnterConfigMode)?.is_some();
+    async fn enter_configuration_mode(&mut self) -> Result<bool, LD2410Error> {
+        let entered = self
+            .execute_command(Command::EnterConfigMode)
+            .await?
+            .is_some();
         if entered {
             #[cfg(feature = "defmt")]
             debug!("Entered configuration mode");
@@ -489,11 +503,15 @@ where
             #[cfg(feature = "defmt")]
             warn!("Failed to enter configuration mode");
         }
+        self.delay.delay_ms(50).await;
         Ok(entered)
     }
 
-    fn leave_configuration_mode(&mut self) -> Result<bool, LD2410Error> {
-        let left = self.execute_command(Command::ExitConfigMode)?.is_some();
+    async fn leave_configuration_mode(&mut self) -> Result<bool, LD2410Error> {
+        let left = self
+            .execute_command(Command::ExitConfigMode)
+            .await?
+            .is_some();
         if left {
             #[cfg(feature = "defmt")]
             debug!("Left configuration mode");
@@ -501,23 +519,7 @@ where
             #[cfg(feature = "defmt")]
             warn!("Failed to leave configuration mode");
         }
+        self.delay.delay_ms(50).await;
         Ok(left)
-    }
-
-    /// Helper to wrap an operation inside configuration mode.
-    fn with_configuration_mode<F, T>(&mut self, op: F) -> Result<Option<T>, LD2410Error>
-    where
-        F: FnOnce(&mut Self) -> Result<Option<T>, LD2410Error>,
-    {
-        if self.enter_configuration_mode()? {
-            self.delay.delay_ms(50);
-            let res = op(self)?;
-            self.leave_configuration_mode()?;
-            Ok(res)
-        } else {
-            #[cfg(feature = "defmt")]
-            warn!("Failed to enter configuration mode");
-            Ok(None)
-        }
     }
 }

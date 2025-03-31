@@ -1064,7 +1064,7 @@ dependencies = [
  "defmt",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
- "embedded-io",
+ "embedded-io-async",
  "libm",
  "num_enum",
 ]
