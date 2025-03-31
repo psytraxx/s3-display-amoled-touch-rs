@@ -41,4 +41,4 @@ embassy-sync = { version = "0.6.2", features = ["defmt"] }
 slint-generated = { path = "../slint-generated" }
 static_cell = "2.1.0"
 embassy-embedded-hal = { version = "0.3.0", features = ["defmt"] }
-embedded-hal-async = { version = "1.0.0", features = ["defmt-03"] }
+embedded-hal = { version = "1.0.0", features = ["defmt-03"] }

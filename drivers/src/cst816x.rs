@@ -1,7 +1,7 @@
 // https://github.com/fbiego/CST816S
 use bitflags::bitflags;
-use embedded_hal::digital::InputPin;
-use embedded_hal_async::{digital::Wait, i2c::I2c};
+use embedded_hal::i2c::I2c;
+use embedded_hal::{digital::InputPin, i2c::Error};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::AsynRegisterDevice;
@@ -102,7 +102,7 @@ pub struct CST816x<I2C, PIN> {
 impl<I2C, PIN> CST816x<I2C, PIN>
 where
     I2C: I2c,
-    PIN: InputPin + Wait,
+    PIN: InputPin,
 {
     /// Create a new CST816S instance
     pub fn new(i2c: I2C, touch_int: PIN) -> Self {
@@ -122,34 +122,34 @@ where
     ///
     /// * `seconds` - Must be 0 (to disable) or 1 to 5 for the desired auto-reset delay.
     ///
-    pub async fn enable_auto_reset(&mut self, seconds: u8) -> Result<(), TouchSensorError> {
+    pub fn enable_auto_reset(&mut self, seconds: u8) -> Result<(), TouchSensorError> {
         let buffer = [0xFB, seconds];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
-    pub async fn get_version(&mut self) -> Result<u8, TouchSensorError> {
-        let result = self.dev.read_register(0xA9).await?;
+    pub fn get_version(&mut self) -> Result<u8, TouchSensorError> {
+        let result = self.dev.read_register(0xA9)?;
         Ok(result)
     }
 
-    pub async fn get_chip_id(&mut self) -> Result<ChipID, TouchSensorError> {
-        let result = self.dev.read_register(0xA7).await?;
+    pub fn get_chip_id(&mut self) -> Result<ChipID, TouchSensorError> {
+        let result = self.dev.read_register(0xA7)?;
         let result = ChipID::try_from(result).expect("Unknown chip ID");
         Ok(result)
     }
 
     /// Disable auto sleep mode
-    pub async fn disable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
+    pub fn disable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
         let buffer = [0xFE, 0x01];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
     /// Enable auto sleep mode
-    pub async fn enable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
+    pub fn enable_auto_sleep(&mut self) -> Result<(), TouchSensorError> {
         let buffer = [0xFE, 0x00];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
@@ -163,18 +163,18 @@ where
     /// # Arguments
     ///
     /// * `width` - The desired pulse width, in 0.1 ms units. Values outside of 1–200 will be clamped.
-    pub async fn set_irq_pulse_width(&mut self, mut width: u8) -> Result<(), TouchSensorError> {
+    pub fn set_irq_pulse_width(&mut self, mut width: u8) -> Result<(), TouchSensorError> {
         // Clamp the width to the valid range 1 to 200.
         width = width.clamp(1, 200);
         // If you want to ensure the value is 8-bit:
         let buffer = [0xED, width];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
     /// Gets the current interrupt pulse width setting, in 0.1 ms units.
-    pub async fn get_irq_pulse_width(&mut self) -> Result<u8, TouchSensorError> {
-        let value = self.dev.read_register(0xED).await?;
+    pub fn get_irq_pulse_width(&mut self) -> Result<u8, TouchSensorError> {
+        let value = self.dev.read_register(0xED)?;
         Ok(value)
     }
 
@@ -188,17 +188,17 @@ where
     /// # Arguments
     ///
     /// * `period` - The desired scan period in 10 ms units. Values outside of 1–30 will be clamped.
-    pub async fn set_nor_scan_period(&mut self, mut period: u8) -> Result<(), TouchSensorError> {
+    pub fn set_nor_scan_period(&mut self, mut period: u8) -> Result<(), TouchSensorError> {
         // Clamp the period to the valid range 1 to 30.
         period = period.clamp(1, 30);
         let buffer = [0xEE, period];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
     /// Gets the current normal scan period setting, in 10 ms units.
-    pub async fn get_nor_scan_period(&mut self) -> Result<u8, TouchSensorError> {
-        let value = self.dev.read_register(0xEE).await?;
+    pub fn get_nor_scan_period(&mut self) -> Result<u8, TouchSensorError> {
+        let value = self.dev.read_register(0xEE)?;
         Ok(value)
     }
 
@@ -212,23 +212,23 @@ where
     /// # Arguments
     ///
     /// * `seconds` - The number of seconds for auto sleep. Values outside of 1–255 will be clamped.
-    pub async fn set_auto_sleep_time(&mut self, mut seconds: i32) -> Result<(), TouchSensorError> {
+    pub fn set_auto_sleep_time(&mut self, mut seconds: i32) -> Result<(), TouchSensorError> {
         seconds = seconds.clamp(1, 255);
         let buffer = [0xF9, seconds as u8];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
     /// Reads the long press time setting from the sensor.
-    pub async fn get_long_press_time(&mut self) -> Result<u8, TouchSensorError> {
-        let result = self.dev.read_register(0xFC).await?;
+    pub fn get_long_press_time(&mut self) -> Result<u8, TouchSensorError> {
+        let result = self.dev.read_register(0xFC)?;
         Ok(result)
     }
 
     // Add these new methods
     /// Read the current interrupt control settings
-    pub async fn get_irq_control(&mut self) -> Result<IrqControl, TouchSensorError> {
-        let result = self.dev.read_register(0xFA).await?;
+    pub fn get_irq_control(&mut self) -> Result<IrqControl, TouchSensorError> {
+        let result = self.dev.read_register(0xFA)?;
         Ok(IrqControl::from_bits_truncate(result))
     }
 
@@ -240,9 +240,9 @@ where
     /// - Bit 5: EnChange (Sends low pulse on touch state change)
     /// - Bit 4: EnMotion (Sends low pulse on gesture detection)
     /// - Bit 0: OnceWLP (Sends one low pulse on long press)
-    pub async fn set_irq_control(&mut self, control: &IrqControl) -> Result<(), TouchSensorError> {
+    pub fn set_irq_control(&mut self, control: &IrqControl) -> Result<(), TouchSensorError> {
         let buffer = [0xFA, control.bits()];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
@@ -251,13 +251,13 @@ where
     /// # Arguments
     ///
     /// * `time` - The long press duration in seconds (0 to disable, 1-10 for duration).
-    pub async fn set_long_press_time(&mut self, time: u8) -> Result<(), TouchSensorError> {
+    pub fn set_long_press_time(&mut self, time: u8) -> Result<(), TouchSensorError> {
         if time > 10 {
             return Err(TouchSensorError::InvalidLongPressTime);
         }
 
         let buffer = [0xFC, time];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
@@ -267,8 +267,8 @@ where
     /// - Bit 0: EnDClick (enable double-click)
     /// - Bit 1: EnConUD (enable continuous up/down swipe)
     /// - Bit 2: EnConLR (enable continuous left/right swipe)
-    pub async fn get_motion_mask(&mut self) -> Result<MotionMask, TouchSensorError> {
-        let result = self.dev.read_register(0xEC).await?;
+    pub fn get_motion_mask(&mut self) -> Result<MotionMask, TouchSensorError> {
+        let result = self.dev.read_register(0xEC)?;
         Ok(MotionMask::from_bits_truncate(result))
     }
 
@@ -282,9 +282,9 @@ where
     /// # Arguments
     ///
     /// * `mask` - A `MotionMask` struct specifying which gestures to enable.
-    pub async fn set_motion_mask(&mut self, mask: &MotionMask) -> Result<(), TouchSensorError> {
+    pub fn set_motion_mask(&mut self, mask: &MotionMask) -> Result<(), TouchSensorError> {
         let buffer = [0xEC, mask.bits()];
-        self.dev.write_register(&buffer).await?;
+        self.dev.write_register(&buffer)?;
         Ok(())
     }
 
@@ -294,10 +294,10 @@ where
             .map_err(|_| TouchSensorError::PinError)
     }
 
-    pub async fn read_touch(&mut self) -> Result<TouchData, TouchSensorError> {
+    pub fn read_touch(&mut self) -> Result<TouchData, TouchSensorError> {
         let mut buffer = [0u8; 13];
 
-        self.dev.read_register_buffer(0x00, &mut buffer).await?;
+        self.dev.read_register_buffer(0x00, &mut buffer)?;
 
         let gesture = Gesture::try_from(buffer[1]).expect("Unknown gesture");
         let points = buffer[2] & 0x0F;
@@ -336,7 +336,7 @@ pub enum TouchSensorError {
 
 impl<E> From<E> for TouchSensorError
 where
-    E: embedded_hal_async::i2c::Error,
+    E: Error,
 {
     fn from(_: E) -> Self {
         TouchSensorError::I2CError

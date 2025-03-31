@@ -57,7 +57,7 @@ async fn process_touch(
         return;
     }
     // Read the touch data
-    match touch.read_touch().await {
+    match touch.read_touch() {
         Ok(point) => {
             let button = PointerEventButton::Left;
             let position = LogicalPosition::new(
