@@ -1,6 +1,6 @@
 use alloc::{format, string::String};
 use core::fmt::{self, Display, Formatter};
-use embedded_hal_async::i2c::I2c;
+use embedded_hal::i2c::{Error, I2c};
 use libm::{log, round};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -83,12 +83,12 @@ where
     /// # Arguments
     /// * `i2c` - I2C bus instance
     /// * `adr` - I2C device address (typically 0x6B)
-    pub async fn new(i2c: I2C, adr: u8) -> Result<Self, PmuSensorError> {
+    pub fn new(i2c: I2C, adr: u8) -> Result<Self, PmuSensorError> {
         let mut instance = Self {
             dev: AsynRegisterDevice::new(i2c, adr),
             user_disable_charge: false,
         };
-        if instance.dev.write_register(&[adr]).await.is_err() {
+        if instance.dev.write_register(&[adr]).is_err() {
             return Err(PmuSensorError::Init);
         }
         Ok(instance)
@@ -98,38 +98,38 @@ where
     // Enable HIZ Mode, Enable ILIM Pin, Input Current Limit
 
     /// Enables HIZ mode
-    pub async fn set_hiz_mode(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x00, 7).await?;
+    pub fn set_hiz_mode(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x00, 7)?;
         Ok(())
     }
 
     /// Exits HIZ mode
-    pub async fn exit_hiz_mode(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x00, 7).await?;
+    pub fn exit_hiz_mode(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x00, 7)?;
         Ok(())
     }
 
     /// Checks if HIZ mode is enabled
-    pub async fn is_hiz_mode(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x00, 7).await?;
+    pub fn is_hiz_mode(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x00, 7)?;
         Ok(result)
     }
 
     /// Enables the current limit pin
-    pub async fn enable_current_limit_pin(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x00, 6).await?;
+    pub fn enable_current_limit_pin(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x00, 6)?;
         Ok(())
     }
 
     /// Disables the current limit pin
-    pub async fn disable_current_limit_pin(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x00, 6).await?;
+    pub fn disable_current_limit_pin(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x00, 6)?;
         Ok(())
     }
 
     /// Checks if the current limit pin is enabled
-    pub async fn is_enable_current_limit_pin(&mut self) -> Result<bool, PmuSensorError> {
-        let result: bool = self.dev.get_register_bit(0x00, 6).await?;
+    pub fn is_enable_current_limit_pin(&mut self) -> Result<bool, PmuSensorError> {
+        let result: bool = self.dev.get_register_bit(0x00, 6)?;
         Ok(result)
     }
 
@@ -137,10 +137,7 @@ where
     ///
     /// # Arguments
     /// * `milliampere` - Current limit in mA
-    pub async fn set_input_current_limit(
-        &mut self,
-        milliampere: u16,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_input_current_limit(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate input is multiple of step size
         if milliampere % IN_CURRENT_STEP != 0 {
             return Err(PmuSensorError::CurrentStepInvalid50);
@@ -150,7 +147,7 @@ where
         let ma = milliampere.clamp(IN_CURRENT_MIN, IN_CURRENT_MAX);
 
         // Read current register value
-        let mut reg_val = self.dev.read_register(0x00).await?;
+        let mut reg_val = self.dev.read_register(0x00)?;
 
         // Clear bottom 6 bits while preserving top 2 bits
         reg_val &= 0xC0;
@@ -162,13 +159,13 @@ where
         reg_val |= current_bits;
 
         // Write back to register
-        self.dev.write_register(&[0x00, reg_val]).await?;
+        self.dev.write_register(&[0x00, reg_val])?;
         Ok(())
     }
 
     /// Gets the input current limit
-    pub async fn get_input_current_limit(&mut self) -> Result<u16, PmuSensorError> {
-        let reg_val = self.dev.read_register(0x00).await?;
+    pub fn get_input_current_limit(&mut self) -> Result<u16, PmuSensorError> {
+        let reg_val = self.dev.read_register(0x00)?;
         let current_bits = reg_val & 0x3F;
         let ma = (current_bits as u16 * IN_CURRENT_STEP) + IN_CURRENT_MIN;
         Ok(ma)
@@ -182,13 +179,13 @@ where
     ///
     /// # Arguments
     /// * `threshold` - Boost hot temperature threshold
-    pub async fn set_boost_mode_hot_temp_threshold(
+    pub fn set_boost_mode_hot_temp_threshold(
         &mut self,
         threshold: BoostHotThreshold,
     ) -> Result<(), PmuSensorError> {
-        let val = self.dev.read_register(0x01).await?;
+        let val = self.dev.read_register(0x01)?;
         let data = (val & 0x3F) | ((threshold as u8) << 6);
-        self.dev.write_register(&[0x01, data]).await?;
+        self.dev.write_register(&[0x01, data])?;
         Ok(())
     }
 
@@ -196,13 +193,13 @@ where
     ///
     /// # Arguments
     /// * `threshold` - Boost cold temperature threshold
-    pub async fn set_boost_mode_cold_temp_threshold(
+    pub fn set_boost_mode_cold_temp_threshold(
         &mut self,
         threshold: BoostColdThreshold,
     ) -> Result<(), PmuSensorError> {
-        let val = self.dev.read_register(0x01).await?;
+        let val = self.dev.read_register(0x01)?;
         let data = (val & 0xDF) | ((threshold as u8) << 5);
-        self.dev.write_register(&[0x01, data]).await?;
+        self.dev.write_register(&[0x01, data])?;
         Ok(())
     }
 
@@ -216,7 +213,7 @@ where
     ///
     /// # Arguments
     /// * `millivolt` - Voltage limit offset in mV
-    pub async fn set_input_voltage_limit_offset(
+    pub fn set_input_voltage_limit_offset(
         &mut self,
         mut millivolt: u16,
     ) -> Result<(), PmuSensorError> {
@@ -230,9 +227,9 @@ where
         }
 
         let steps = millivolt / IN_CURRENT_OFFSET_STEP;
-        let val = self.dev.read_register(0x01).await?;
+        let val = self.dev.read_register(0x01)?;
         let data = (val & 0xE0) | (steps as u8);
-        self.dev.write_register(&[0x01, data]).await?;
+        self.dev.write_register(&[0x01, data])?;
         Ok(())
     }
 
@@ -241,19 +238,19 @@ where
     // Input Current Optimizer (ICO) Enable, Force Input Detection, Automatic Input Detection Enable
 
     /// Enables ADC conversion for voltage and current monitoring
-    pub async fn set_adc_enabled(&mut self) -> Result<(), PmuSensorError> {
-        let mut data = self.dev.read_register(0x02).await?;
+    pub fn set_adc_enabled(&mut self) -> Result<(), PmuSensorError> {
+        let mut data = self.dev.read_register(0x02)?;
         data |= 1 << 7; // Start ADC conversion
         data |= 1 << 6; // Set continuous conversion
-        self.dev.write_register(&[0x02, data]).await?;
+        self.dev.write_register(&[0x02, data])?;
         Ok(())
     }
 
     /// Disables ADC conversion
-    pub async fn set_adc_disabled(&mut self) -> Result<(), PmuSensorError> {
-        let mut data = self.dev.read_register(0x02).await?;
+    pub fn set_adc_disabled(&mut self) -> Result<(), PmuSensorError> {
+        let mut data = self.dev.read_register(0x02)?;
         data &= !(1 << 7); // Clear ADC conversion bit
-        self.dev.write_register(&[0x02, data]).await?;
+        self.dev.write_register(&[0x02, data])?;
         Ok(())
     }
 
@@ -261,17 +258,17 @@ where
     ///
     /// # Arguments
     /// * `freq` - Boost frequency
-    pub async fn set_boost_freq(&mut self, freq: BoostFreq) -> Result<(), PmuSensorError> {
+    pub fn set_boost_freq(&mut self, freq: BoostFreq) -> Result<(), PmuSensorError> {
         match freq {
-            BoostFreq::Freq500KHz => self.dev.set_register_bit(0x02, 5).await?,
-            BoostFreq::Freq1500KHz => self.dev.clear_register_bit(0x02, 5).await?,
+            BoostFreq::Freq500KHz => self.dev.set_register_bit(0x02, 5)?,
+            BoostFreq::Freq1500KHz => self.dev.clear_register_bit(0x02, 5)?,
         }
         Ok(())
     }
 
     /// Gets the boost frequency
-    pub async fn get_boost_freq(&mut self) -> Result<BoostFreq, PmuSensorError> {
-        let bit = self.dev.get_register_bit(0x02, 5).await?;
+    pub fn get_boost_freq(&mut self) -> Result<BoostFreq, PmuSensorError> {
+        let bit = self.dev.get_register_bit(0x02, 5)?;
         Ok(if bit {
             BoostFreq::Freq500KHz
         } else {
@@ -280,50 +277,50 @@ where
     }
 
     /// Enables the input current optimizer
-    pub async fn enable_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x02, 4).await?;
+    pub fn enable_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x02, 4)?;
         Ok(())
     }
 
     /// Disables the input current optimizer
-    pub async fn disable_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x02, 4).await?;
+    pub fn disable_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x02, 4)?;
         Ok(())
     }
 
     /// Enables input detection
-    pub async fn enable_input_detection(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x02, 1).await?;
+    pub fn enable_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x02, 1)?;
         Ok(())
     }
 
     /// Disables input detection
-    pub async fn disable_input_detection(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x02, 1).await?;
+    pub fn disable_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x02, 1)?;
         Ok(())
     }
 
     /// Checks if input detection is enabled
-    pub async fn is_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x02, 1).await?;
+    pub fn is_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x02, 1)?;
         Ok(result)
     }
 
     /// Enables automatic input detection
-    pub async fn enable_automatic_input_detection(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x02, 0).await?;
+    pub fn enable_automatic_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x02, 0)?;
         Ok(())
     }
 
     /// Disables automatic input detection
-    pub async fn disable_automatic_input_detection(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x02, 0).await?;
+    pub fn disable_automatic_input_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x02, 0)?;
         Ok(())
     }
 
     /// Checks if automatic input detection is enabled
-    pub async fn is_automatic_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x02, 0).await?;
+    pub fn is_automatic_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x02, 0)?;
         Ok(result)
     }
 
@@ -332,71 +329,71 @@ where
     // Charge Enable Configuration,  Minimum System Voltage Limit, Minimum Battery Voltage (falling) to exit boost mode
 
     /// Checks if battery load is enabled
-    pub async fn is_bat_load_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x03, 7).await?;
+    pub fn is_bat_load_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x03, 7)?;
         Ok(result)
     }
 
     /// Disables battery load
-    pub async fn disable_bat_load(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x03, 7).await?;
+    pub fn disable_bat_load(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x03, 7)?;
         Ok(())
     }
 
     /// Enables battery load
-    pub async fn enable_bat_load(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x03, 7).await?;
+    pub fn enable_bat_load(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x03, 7)?;
         Ok(())
     }
 
     /// Feeds the watchdog timer
-    pub async fn feed_watchdog(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x03, 6).await?;
+    pub fn feed_watchdog(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x03, 6)?;
         Ok(())
     }
 
     /// Checks if OTG mode is enabled
-    pub async fn is_otg_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x03, 5).await?;
+    pub fn is_otg_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x03, 5)?;
         Ok(result)
     }
 
     /// Disables OTG mode
-    pub async fn disable_otg(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x03, 5).await?;
+    pub fn disable_otg(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x03, 5)?;
         // Re-enable charging if it wasn't explicitly disabled by user
         if !self.user_disable_charge {
-            self.dev.set_register_bit(0x03, 4).await?;
+            self.dev.set_register_bit(0x03, 4)?;
         }
         Ok(())
     }
 
     /// Enables OTG mode
-    pub async fn enable_otg(&mut self) -> Result<bool, PmuSensorError> {
-        if self.is_vbus_in().await? {
+    pub fn enable_otg(&mut self) -> Result<bool, PmuSensorError> {
+        if self.is_vbus_in()? {
             return Ok(false);
         }
-        self.dev.set_register_bit(0x03, 5).await?;
+        self.dev.set_register_bit(0x03, 5)?;
         Ok(true)
     }
 
     /// Enables charging
-    pub async fn set_charge_enabled(&mut self) -> Result<(), PmuSensorError> {
+    pub fn set_charge_enabled(&mut self) -> Result<(), PmuSensorError> {
         self.user_disable_charge = false;
-        self.dev.set_register_bit(0x03, 4).await?;
+        self.dev.set_register_bit(0x03, 4)?;
         Ok(())
     }
 
     /// Disables charging
-    pub async fn set_charge_disabled(&mut self) -> Result<(), PmuSensorError> {
+    pub fn set_charge_disabled(&mut self) -> Result<(), PmuSensorError> {
         self.user_disable_charge = true;
-        self.dev.clear_register_bit(0x03, 4).await?;
+        self.dev.clear_register_bit(0x03, 4)?;
         Ok(())
     }
 
     /// Checks if charging is enabled
-    pub async fn is_charge_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x03, 4).await?;
+    pub fn is_charge_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x03, 4)?;
         Ok(result)
     }
 
@@ -404,10 +401,7 @@ where
     ///
     /// # Arguments
     /// * `millivolt` - Power down voltage in mV
-    pub async fn set_sys_power_down_voltage(
-        &mut self,
-        millivolt: u16,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_sys_power_down_voltage(&mut self, millivolt: u16) -> Result<(), PmuSensorError> {
         if millivolt % SYS_VOL_STEPS != 0 {
             return Err(PmuSensorError::VoltageStepInvalid100);
         }
@@ -415,17 +409,17 @@ where
             return Err(PmuSensorError::PowerDownVoltageInvalid);
         }
 
-        let mut val = self.dev.read_register(0x03).await?;
+        let mut val = self.dev.read_register(0x03)?;
         val &= 0xF1;
         val |= ((millivolt - SYS_VOFF_VOL_MIN) / SYS_VOL_STEPS) as u8;
         val <<= 1;
-        self.dev.write_register(&[0x03, val]).await?;
+        self.dev.write_register(&[0x03, val])?;
         Ok(())
     }
 
     /// Gets the system power down voltage
-    pub async fn get_sys_power_down_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let val = self.dev.read_register(0x03).await?;
+    pub fn get_sys_power_down_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x03)?;
         let val = (val & 0x0E) >> 1;
         Ok((val as u16 * SYS_VOL_STEPS) + SYS_VOFF_VOL_MIN)
     }
@@ -434,13 +428,13 @@ where
     ///
     /// # Arguments
     /// * `voltage` - Exit boost mode voltage
-    pub async fn set_exit_boost_mode_voltage(
+    pub fn set_exit_boost_mode_voltage(
         &mut self,
         voltage: ExitBoostModeVolt,
     ) -> Result<(), PmuSensorError> {
         match voltage {
-            ExitBoostModeVolt::MiniVolt2V9 => self.dev.clear_register_bit(0x03, 0).await?,
-            ExitBoostModeVolt::MiniVolt2V5 => self.dev.set_register_bit(0x03, 0).await?,
+            ExitBoostModeVolt::MiniVolt2V9 => self.dev.clear_register_bit(0x03, 0)?,
+            ExitBoostModeVolt::MiniVolt2V5 => self.dev.set_register_bit(0x03, 0)?,
         }
         Ok(())
     }
@@ -449,14 +443,14 @@ where
     // Current pulse control Enable, Fast Charge Current Limit
 
     /// Enables current pulse control
-    pub async fn set_current_pulse_control_enabled(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x04, 7).await?;
+    pub fn set_current_pulse_control_enabled(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x04, 7)?;
         Ok(())
     }
 
     /// Disables current pulse control
-    pub async fn set_current_pulse_control_disabled(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x04, 7).await?;
+    pub fn set_current_pulse_control_disabled(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x04, 7)?;
         Ok(())
     }
 
@@ -464,7 +458,7 @@ where
     ///
     /// # Arguments
     /// * `milliampere` - Fast charge current limit in mA
-    pub async fn set_fast_charge_current_limit(
+    pub fn set_fast_charge_current_limit(
         &mut self,
         milliampere: u16,
     ) -> Result<(), PmuSensorError> {
@@ -477,7 +471,7 @@ where
         let current = milliampere.min(FAST_CHG_CURRENT_MAX);
 
         // Read current register value
-        let mut val = self.dev.read_register(0x04).await?;
+        let mut val = self.dev.read_register(0x04)?;
 
         // Clear bits 6:0, keep bit 7
         val &= 0x80;
@@ -486,13 +480,13 @@ where
         val |= (current / FAST_CHG_CUR_STEP) as u8;
 
         // Write back to register
-        self.dev.write_register(&[0x04, val]).await?;
+        self.dev.write_register(&[0x04, val])?;
         Ok(())
     }
 
     /// Gets the fast charge current limit
-    pub async fn get_fast_charge_current_limit(&mut self) -> Result<u16, PmuSensorError> {
-        let val = self.dev.read_register(0x04).await?;
+    pub fn get_fast_charge_current_limit(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x04)?;
         let bits = val & 0x7F; // Extract bits 6:0
 
         Ok(bits as u16 * FAST_CHG_CUR_STEP)
@@ -505,7 +499,7 @@ where
     ///
     /// # Arguments
     /// * `milliampere` - Precharge current in mA
-    pub async fn set_precharge_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
+    pub fn set_precharge_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate step size
         if milliampere % PRE_CHG_CUR_STEP != 0 {
             return Err(PmuSensorError::CurrentStepInvalid64);
@@ -515,7 +509,7 @@ where
         let current = milliampere.clamp(PRE_CHG_CURRENT_MIN, PRE_CHG_CURRENT_MAX);
 
         // Read current register value
-        let mut val = self.dev.read_register(0x05).await?;
+        let mut val = self.dev.read_register(0x05)?;
 
         // Clear bits 7:4, keep bits 3:0
         val &= 0x0F;
@@ -525,13 +519,13 @@ where
         val |= current_bits << 4;
 
         // Write back to register
-        self.dev.write_register(&[0x05, val]).await?;
+        self.dev.write_register(&[0x05, val])?;
         Ok(())
     }
 
     /// Gets the precharge current
-    pub async fn get_precharge_current(&mut self) -> Result<u16, PmuSensorError> {
-        let val = self.dev.read_register(0x05).await?;
+    pub fn get_precharge_current(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x05)?;
         let bits = (val & 0xF0) >> 4;
 
         Ok(PRE_CHG_CUR_STEP + (bits as u16 * PRE_CHG_CUR_STEP))
@@ -541,10 +535,7 @@ where
     ///
     /// # Arguments
     /// * `milliampere` - Termination current in mA
-    pub async fn set_termination_current(
-        &mut self,
-        milliampere: u16,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_termination_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate step size
         if milliampere % TERM_CHG_CUR_STEP != 0 {
             return Err(PmuSensorError::CurrentStepInvalid64);
@@ -554,7 +545,7 @@ where
         let current = milliampere.clamp(TERM_CHG_CURRENT_MIN, TERM_CHG_CURRENT_MAX);
 
         // Read current register value
-        let mut val = self.dev.read_register(0x05).await?;
+        let mut val = self.dev.read_register(0x05)?;
 
         // Clear bits 3:0, keep bits 7:4
         val &= 0xF0;
@@ -564,13 +555,13 @@ where
         val |= current_bits;
 
         // Write back to register
-        self.dev.write_register(&[0x05, val]).await?;
+        self.dev.write_register(&[0x05, val])?;
         Ok(())
     }
 
     /// Gets the termination current
-    pub async fn get_termination_current(&mut self) -> Result<u16, PmuSensorError> {
-        let val = self.dev.read_register(0x05).await?;
+    pub fn get_termination_current(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x05)?;
         let bits = val & 0x0F;
         Ok(TERM_CHG_CUR_STEP + (bits as u16 * TERM_CHG_CUR_STEP))
     }
@@ -582,10 +573,7 @@ where
     ///
     /// # Arguments
     /// * `target_voltage` - Charge target voltage in mV
-    pub async fn set_charge_target_voltage(
-        &mut self,
-        target_voltage: u16,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_charge_target_voltage(&mut self, target_voltage: u16) -> Result<(), PmuSensorError> {
         // Check if voltage is multiple of step size
         if target_voltage % CHG_VOL_STEP != 0 {
             return Err(PmuSensorError::VoltageStepInvalid16);
@@ -595,7 +583,7 @@ where
         let voltage = target_voltage.clamp(FAST_CHG_VOL_MIN, FAST_CHG_VOL_MAX);
 
         // Read current register value
-        let mut val = self.dev.read_register(0x06).await?;
+        let mut val = self.dev.read_register(0x06)?;
 
         // Clear bits 7:2, keep bits 1:0
         val &= 0x03;
@@ -604,13 +592,13 @@ where
         val |= (((voltage - CHG_VOL_BASE) / CHG_VOL_STEP) << 2) as u8;
 
         // Write back to register
-        self.dev.write_register(&[0x06, val]).await?;
+        self.dev.write_register(&[0x06, val])?;
         Ok(())
     }
 
     /// Gets the charge target voltage
-    pub async fn get_charge_target_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let val = self.dev.read_register(0x06).await?;
+    pub fn get_charge_target_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x06)?;
         let bits = (val & 0xFC) >> 2;
 
         if bits > 0x30 {
@@ -624,13 +612,13 @@ where
     ///
     /// # Arguments
     /// * `threshold` - Fast charge threshold
-    pub async fn set_fast_charge_threshold(
+    pub fn set_fast_charge_threshold(
         &mut self,
         threshold: FastChargeThreshold,
     ) -> Result<(), PmuSensorError> {
         match threshold {
-            FastChargeThreshold::Volt2V8 => self.dev.clear_register_bit(0x06, 1).await?,
-            FastChargeThreshold::Volt3V0 => self.dev.set_register_bit(0x06, 1).await?,
+            FastChargeThreshold::Volt2V8 => self.dev.clear_register_bit(0x06, 1)?,
+            FastChargeThreshold::Volt3V0 => self.dev.set_register_bit(0x06, 1)?,
         }
         Ok(())
     }
@@ -639,13 +627,13 @@ where
     ///
     /// # Arguments
     /// * `offset` - Recharge threshold offset
-    pub async fn set_battery_recharge_threshold_offset(
+    pub fn set_battery_recharge_threshold_offset(
         &mut self,
         offset: RechargeThresholdOffset,
     ) -> Result<(), PmuSensorError> {
         match offset {
-            RechargeThresholdOffset::Offset100mV => self.dev.clear_register_bit(0x06, 0).await?,
-            RechargeThresholdOffset::Offset200mV => self.dev.set_register_bit(0x06, 0).await?,
+            RechargeThresholdOffset::Offset100mV => self.dev.clear_register_bit(0x06, 0)?,
+            RechargeThresholdOffset::Offset200mV => self.dev.set_register_bit(0x06, 0)?,
         }
         Ok(())
     }
@@ -655,46 +643,46 @@ where
     // Fast Charge Timer Setting, JEITA Low Temperature Current Setting
 
     /// Enables charging termination
-    pub async fn enable_charging_termination(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x07, 7).await?;
+    pub fn enable_charging_termination(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x07, 7)?;
         Ok(())
     }
 
     /// Disables charging termination
-    pub async fn disable_charging_termination(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x07, 7).await?;
+    pub fn disable_charging_termination(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x07, 7)?;
         Ok(())
     }
 
     /// Checks if charging termination is enabled
-    pub async fn is_charging_termination_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x07, 7).await?;
+    pub fn is_charging_termination_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x07, 7)?;
         Ok(result)
     }
 
     /// Disables the STAT pin
-    pub async fn disable_stat_pin(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x07, 6).await?;
+    pub fn disable_stat_pin(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x07, 6)?;
         Ok(())
     }
 
     /// Enables the STAT pin
-    pub async fn enable_stat_pin(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x07, 6).await?;
+    pub fn enable_stat_pin(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x07, 6)?;
         Ok(())
     }
 
     /// Checks if the STAT pin is enabled
-    pub async fn is_stat_pin_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x07, 6).await?;
+    pub fn is_stat_pin_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x07, 6)?;
         Ok(result)
     }
 
     /// Disables the watchdog timer
-    pub async fn disable_watchdog(&mut self) -> Result<(), PmuSensorError> {
-        let mut val = self.dev.read_register(0x07).await?;
+    pub fn disable_watchdog(&mut self) -> Result<(), PmuSensorError> {
+        let mut val = self.dev.read_register(0x07)?;
         val &= 0xCF;
-        self.dev.write_register(&[0x07, val]).await?;
+        self.dev.write_register(&[0x07, val])?;
         Ok(())
     }
 
@@ -702,31 +690,31 @@ where
     ///
     /// # Arguments
     /// * `config` - Watchdog timer configuration
-    pub async fn enable_watchdog(&mut self, config: WatchdogConfig) -> Result<(), PmuSensorError> {
-        let mut val = self.dev.read_register(0x07).await?;
+    pub fn enable_watchdog(&mut self, config: WatchdogConfig) -> Result<(), PmuSensorError> {
+        let mut val = self.dev.read_register(0x07)?;
         // Clear the 4th and 5th bits (watchdog timer setting bits)
         val &= 0xCF; // 0xCF = 1100_1111, clears bits 4 & 5
                      // Map the low two bits of config into bits 4-5
         let bits: u8 = (config as u8 & 0x03) << 4;
-        self.dev.write_register(&[0x07, val | bits]).await?;
+        self.dev.write_register(&[0x07, val | bits])?;
         Ok(())
     }
 
     /// Disables the charging safety timer
-    pub async fn disable_charging_safety_timer(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x07, 3).await?;
+    pub fn disable_charging_safety_timer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x07, 3)?;
         Ok(())
     }
 
     /// Enables the charging safety timer
-    pub async fn enable_charging_safety_timer(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x07, 3).await?;
+    pub fn enable_charging_safety_timer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x07, 3)?;
         Ok(())
     }
 
     /// Checks if the charging safety timer is enabled
-    pub async fn is_charging_safety_timer_enabled(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x07, 3).await?;
+    pub fn is_charging_safety_timer_enabled(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x07, 3)?;
         Ok(result)
     }
 
@@ -734,23 +722,20 @@ where
     ///
     /// # Arguments
     /// * `timer` - Fast charge timer
-    pub async fn set_fast_charge_timer(
-        &mut self,
-        timer: FastChargeTimer,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_fast_charge_timer(&mut self, timer: FastChargeTimer) -> Result<(), PmuSensorError> {
         let timer: u8 = timer.into();
-        let mut val = self.dev.read_register(0x07).await?;
+        let mut val = self.dev.read_register(0x07)?;
         // Clear the second and third bits (bit1 & bit2)
         val &= 0xF9; // 0xF9 = 1111_1001 (clears bits 1 and 2)
                      // Set the fast charge timer in bits 1-2
         val |= (timer & 0x03) << 1;
-        self.dev.write_register(&[0x07, val]).await?;
+        self.dev.write_register(&[0x07, val])?;
         Ok(())
     }
 
     /// Gets the fast charge timer
-    pub async fn get_fast_charge_timer(&mut self) -> Result<FastChargeTimer, PmuSensorError> {
-        let val = self.dev.read_register(0x07).await?;
+    pub fn get_fast_charge_timer(&mut self) -> Result<FastChargeTimer, PmuSensorError> {
+        let val = self.dev.read_register(0x07)?;
         let timer_val = (val >> 1) & 0x03;
         let timer = FastChargeTimer::try_from(timer_val).expect("Invalid timer value");
         Ok(timer)
@@ -760,13 +745,13 @@ where
     ///
     /// # Arguments
     /// * `current` - JEITA low temperature current
-    pub async fn set_jeita_low_temperature_current(
+    pub fn set_jeita_low_temperature_current(
         &mut self,
         current: JeitaLowTemperatureCurrent,
     ) -> Result<(), PmuSensorError> {
         match current {
-            JeitaLowTemperatureCurrent::Temp50 => self.dev.clear_register_bit(0x07, 0).await?,
-            JeitaLowTemperatureCurrent::Temp20 => self.dev.set_register_bit(0x07, 0).await?,
+            JeitaLowTemperatureCurrent::Temp50 => self.dev.clear_register_bit(0x07, 0)?,
+            JeitaLowTemperatureCurrent::Temp20 => self.dev.set_register_bit(0x07, 0)?,
         }
         Ok(())
     }
@@ -778,19 +763,16 @@ where
     ///
     /// # Arguments
     /// * `milliohm` - IR compensation resistor in mOhm
-    pub async fn set_ir_compensation_resistor(
-        &mut self,
-        milliohm: u16,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_ir_compensation_resistor(&mut self, milliohm: u16) -> Result<(), PmuSensorError> {
         if milliohm % BAT_COMP_STEPS != 0 {
             return Err(PmuSensorError::ResistanceStepInvalid20);
         }
 
         let resistance = milliohm.clamp(0, BAT_COMP_MAX);
-        let mut val = self.dev.read_register(0x08).await?;
+        let mut val = self.dev.read_register(0x08)?;
         val &= 0x1F;
         val |= ((resistance / BAT_COMP_STEPS) as u8) << 5;
-        self.dev.write_register(&[0x08, val]).await?;
+        self.dev.write_register(&[0x08, val])?;
         Ok(())
     }
 
@@ -798,7 +780,7 @@ where
     ///
     /// # Arguments
     /// * `millivolt` - IR compensation voltage clamp in mV
-    pub async fn set_ir_compensation_voltage_clamp(
+    pub fn set_ir_compensation_voltage_clamp(
         &mut self,
         millivolt: u16,
     ) -> Result<(), PmuSensorError> {
@@ -807,10 +789,10 @@ where
         }
 
         let voltage = millivolt.clamp(0, VCLAMP_MAX);
-        let mut val = self.dev.read_register(0x08).await?;
+        let mut val = self.dev.read_register(0x08)?;
         val &= 0xE3;
         val |= ((voltage / VCLAMP_STEPS) as u8) << 2;
-        self.dev.write_register(&[0x08, val]).await?;
+        self.dev.write_register(&[0x08, val])?;
         Ok(())
     }
 
@@ -818,15 +800,15 @@ where
     ///
     /// # Arguments
     /// * `threshold` - Thermal regulation threshold
-    pub async fn set_thermal_regulation_threshold(
+    pub fn set_thermal_regulation_threshold(
         &mut self,
         threshold: ThermalRegThreshold,
     ) -> Result<(), PmuSensorError> {
         let threshold: u8 = threshold.into();
-        let mut val = self.dev.read_register(0x08).await?;
+        let mut val = self.dev.read_register(0x08)?;
         val &= 0xFC;
         val |= threshold;
-        self.dev.write_register(&[0x08, val]).await?;
+        self.dev.write_register(&[0x08, val])?;
         Ok(())
     }
 
@@ -836,8 +818,8 @@ where
     // Current pulse control voltage down enable
 
     /// Forces the start of the input current optimizer (ICO)
-    pub async fn force_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x09, 7).await?;
+    pub fn force_input_current_optimizer(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x09, 7)?;
         Ok(())
     }
 
@@ -845,32 +827,32 @@ where
     ///
     /// # Arguments
     /// * `slow_down` - If true, safety timer is slowed by 2X during input DPM/thermal regulation (default)
-    pub async fn set_safety_timer_thermal_regulation(
+    pub fn set_safety_timer_thermal_regulation(
         &mut self,
         slow_down: bool,
     ) -> Result<(), PmuSensorError> {
         if slow_down {
-            self.dev.set_register_bit(0x09, 6).await?;
+            self.dev.set_register_bit(0x09, 6)?;
         } else {
-            self.dev.clear_register_bit(0x09, 6).await?;
+            self.dev.clear_register_bit(0x09, 6)?;
         }
         Ok(())
     }
 
     /// Shuts down the device
-    pub async fn shutdown(&mut self) -> Result<(), PmuSensorError> {
-        self.disable_battery_power_path().await
+    pub fn shutdown(&mut self) -> Result<(), PmuSensorError> {
+        self.disable_battery_power_path()
     }
 
     /// Disables the battery power path
-    pub async fn disable_battery_power_path(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x09, 5).await?;
+    pub fn disable_battery_power_path(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x09, 5)?;
         Ok(())
     }
 
     /// Enables the battery power path
-    pub async fn enable_battery_power_path(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.clear_register_bit(0x09, 5).await?;
+    pub fn enable_battery_power_path(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.clear_register_bit(0x09, 5)?;
         Ok(())
     }
 
@@ -878,14 +860,11 @@ where
     ///
     /// # Arguments
     /// * `use_vreg` - If true, use VREG instead of VREG-200mV during JEITA high temperature
-    pub async fn set_jeita_high_temp_voltage(
-        &mut self,
-        use_vreg: bool,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_jeita_high_temp_voltage(&mut self, use_vreg: bool) -> Result<(), PmuSensorError> {
         if use_vreg {
-            self.dev.set_register_bit(0x09, 4).await?;
+            self.dev.set_register_bit(0x09, 4)?;
         } else {
-            self.dev.clear_register_bit(0x09, 4).await?;
+            self.dev.clear_register_bit(0x09, 4)?;
         }
         Ok(())
     }
@@ -894,11 +873,11 @@ where
     ///
     /// # Arguments
     /// * `delay` - If true, BATFET turns off with tSM_DLY delay when BATFET_DIS is set
-    pub async fn set_batfet_turnoff_delay(&mut self, delay: bool) -> Result<(), PmuSensorError> {
+    pub fn set_batfet_turnoff_delay(&mut self, delay: bool) -> Result<(), PmuSensorError> {
         if delay {
-            self.dev.set_register_bit(0x09, 3).await?;
+            self.dev.set_register_bit(0x09, 3)?;
         } else {
-            self.dev.clear_register_bit(0x09, 3).await?;
+            self.dev.clear_register_bit(0x09, 3)?;
         }
         Ok(())
     }
@@ -907,11 +886,11 @@ where
     ///
     /// # Arguments
     /// * `enable` - If true, enables full system reset
-    pub async fn set_full_system_reset(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+    pub fn set_full_system_reset(&mut self, enable: bool) -> Result<(), PmuSensorError> {
         if enable {
-            self.dev.set_register_bit(0x09, 2).await?;
+            self.dev.set_register_bit(0x09, 2)?;
         } else {
-            self.dev.clear_register_bit(0x09, 2).await?;
+            self.dev.clear_register_bit(0x09, 2)?;
         }
         Ok(())
     }
@@ -920,14 +899,11 @@ where
     ///
     /// # Arguments
     /// * `enable` - If true, enables current pulse control voltage up
-    pub async fn set_current_pulse_voltage_up(
-        &mut self,
-        enable: bool,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_current_pulse_voltage_up(&mut self, enable: bool) -> Result<(), PmuSensorError> {
         if enable {
-            self.dev.set_register_bit(0x09, 1).await?;
+            self.dev.set_register_bit(0x09, 1)?;
         } else {
-            self.dev.clear_register_bit(0x09, 1).await?;
+            self.dev.clear_register_bit(0x09, 1)?;
         }
         Ok(())
     }
@@ -936,14 +912,11 @@ where
     ///
     /// # Arguments
     /// * `enable` - If true, enables current pulse control voltage down
-    pub async fn set_current_pulse_voltage_down(
-        &mut self,
-        enable: bool,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_current_pulse_voltage_down(&mut self, enable: bool) -> Result<(), PmuSensorError> {
         if enable {
-            self.dev.set_register_bit(0x09, 0).await?;
+            self.dev.set_register_bit(0x09, 0)?;
         } else {
-            self.dev.clear_register_bit(0x09, 0).await?;
+            self.dev.clear_register_bit(0x09, 0)?;
         }
         Ok(())
     }
@@ -955,16 +928,16 @@ where
     ///
     /// # Arguments
     /// * `millivolt` - Boost mode voltage regulation in mV
-    pub async fn set_boost_voltage(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
+    pub fn set_boost_voltage(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
         if millivolt % BOOST_VOL_STEP != 0 {
             return Err(PmuSensorError::VoltageStepInvalid64);
         }
 
         millivolt = millivolt.clamp(BOOST_VOL_MIN, BOOST_VOL_MAX);
-        let val = self.dev.read_register(0x0A).await?;
+        let val = self.dev.read_register(0x0A)?;
         let steps = ((millivolt - BOOST_VOL_BASE) / BOOST_VOL_STEP) as u8;
         let new_val = (val & 0xF0) | (steps << 4);
-        self.dev.write_register(&[0x0A, new_val]).await?;
+        self.dev.write_register(&[0x0A, new_val])?;
         Ok(())
     }
 
@@ -972,14 +945,14 @@ where
     ///
     /// # Arguments
     /// * `limit` - Boost mode current limit
-    pub async fn set_boost_current_limit(
+    pub fn set_boost_current_limit(
         &mut self,
         limit: BoostCurrentLimit,
     ) -> Result<(), PmuSensorError> {
         let limit: u8 = limit.into();
-        let val = self.dev.read_register(0x0A).await?;
+        let val = self.dev.read_register(0x0A)?;
         let bits = (val & 0x03) | limit;
-        self.dev.write_register(&[0x0A, bits]).await?;
+        self.dev.write_register(&[0x0A, bits])?;
         Ok(())
     }
 
@@ -987,11 +960,11 @@ where
     ///
     /// # Arguments
     /// * `enable` - If true, allow PFM in boost mode (default)
-    pub async fn set_boost_mode_pfm(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+    pub fn set_boost_mode_pfm(&mut self, enable: bool) -> Result<(), PmuSensorError> {
         if enable {
-            self.dev.clear_register_bit(0x0A, 3).await?;
+            self.dev.clear_register_bit(0x0A, 3)?;
         } else {
-            self.dev.set_register_bit(0x0A, 3).await?;
+            self.dev.set_register_bit(0x0A, 3)?;
         }
         Ok(())
     }
@@ -1000,43 +973,43 @@ where
     // VBUS Status register, N/A Charging Status, Power Good Status , VSYS Regulation Status
 
     /// Gets the charge status
-    pub async fn get_charge_status(&mut self) -> Result<ChargeStatus, PmuSensorError> {
-        let val = self.dev.read_register(0x0B).await?;
+    pub fn get_charge_status(&mut self) -> Result<ChargeStatus, PmuSensorError> {
+        let val = self.dev.read_register(0x0B)?;
         let result = (val >> 3) & 0x03;
         let result = ChargeStatus::try_from(result).expect("Invalid charge status");
         Ok(result)
     }
 
     /// Checks if VBUS is present
-    pub async fn is_vbus_in(&mut self) -> Result<bool, PmuSensorError> {
-        let val = self.get_bus_status().await?;
+    pub fn is_vbus_in(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.get_bus_status()?;
         Ok(val != BusStatus::NoInput)
     }
 
     /// Checks if device is in OTG mode
-    pub async fn is_otg(&mut self) -> Result<bool, PmuSensorError> {
-        Ok(self.get_bus_status().await? == BusStatus::Otg)
+    pub fn is_otg(&mut self) -> Result<bool, PmuSensorError> {
+        Ok(self.get_bus_status()? == BusStatus::Otg)
     }
 
     /// Checks if device is currently charging
-    pub async fn is_charging(&mut self) -> Result<bool, PmuSensorError> {
-        Ok(self.get_charge_status().await? != ChargeStatus::NoCharge)
+    pub fn is_charging(&mut self) -> Result<bool, PmuSensorError> {
+        Ok(self.get_charge_status()? != ChargeStatus::NoCharge)
     }
 
     /// Checks if charging is complete
-    pub async fn is_charge_done(&mut self) -> Result<bool, PmuSensorError> {
-        Ok(self.get_charge_status().await? == ChargeStatus::Done)
+    pub fn is_charge_done(&mut self) -> Result<bool, PmuSensorError> {
+        Ok(self.get_charge_status()? == ChargeStatus::Done)
     }
 
     /// Checks power good status
-    pub async fn is_power_good(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x0B, 2).await?;
+    pub fn is_power_good(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x0B, 2)?;
         Ok(result)
     }
 
     /// Gets the bus status
-    pub async fn get_bus_status(&mut self) -> Result<BusStatus, PmuSensorError> {
-        let val = self.dev.read_register(0x0B).await?;
+    pub fn get_bus_status(&mut self) -> Result<BusStatus, PmuSensorError> {
+        let val = self.dev.read_register(0x0B)?;
         let result = (val >> 5) & 0x07;
         let result = BusStatus::try_from(result).expect("Invalid bus status");
         Ok(result)
@@ -1046,42 +1019,42 @@ where
     // Watchdog Fault Status, Boost Mode Fault Status, Charge Fault Status, Battery Fault Status, NTC Fault Status
 
     /// Checks the watchdog fault status
-    pub async fn is_watchdog_fault(&mut self) -> Result<bool, PmuSensorError> {
-        let val = self.dev.read_register(0x0C).await?;
+    pub fn is_watchdog_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
         Ok(((val >> 7) & 0x01) != 0)
     }
 
     /// Checks the boost mode fault status
-    pub async fn is_boost_fault(&mut self) -> Result<bool, PmuSensorError> {
-        let val = self.dev.read_register(0x0C).await?;
+    pub fn is_boost_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
         Ok(((val >> 6) & 0x01) != 0)
     }
 
     /// Gets the charge fault status
-    pub async fn get_charge_fault(&mut self) -> Result<ChargeFaultStatus, PmuSensorError> {
-        let val = self.dev.read_register(0x0C).await?;
+    pub fn get_charge_fault(&mut self) -> Result<ChargeFaultStatus, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
         let fault = (val >> 4) & 0x03;
         let fault = ChargeFaultStatus::try_from(fault).expect("Invalid charge fault status");
         Ok(fault)
     }
 
     /// Checks the battery fault status
-    pub async fn is_battery_fault(&mut self) -> Result<bool, PmuSensorError> {
-        let val = self.dev.read_register(0x0C).await?;
+    pub fn is_battery_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
         Ok(((val >> 3) & 0x01) != 0)
     }
 
     /// Checks the NTC fault status
-    pub async fn is_ntc_fault(&mut self) -> Result<bool, PmuSensorError> {
-        let val = self.dev.read_register(0x0C).await?;
+    pub fn is_ntc_fault(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x0C)?;
         Ok((val & 0x07) != 0)
     }
 
     /// Gets the NTC status as a human-readable string
-    pub async fn get_ntc_status_string(&mut self) -> Result<&'static str, PmuSensorError> {
-        let status = self.dev.read_register(0x0C).await? & 0x07;
+    pub fn get_ntc_status_string(&mut self) -> Result<&'static str, PmuSensorError> {
+        let status = self.dev.read_register(0x0C)? & 0x07;
 
-        if self.is_otg().await? {
+        if self.is_otg()? {
             // Boost mode
             match status {
                 x if x == NtcBoostStatus::Normal as u8 => Ok("Boost mode NTC normal"),
@@ -1110,14 +1083,11 @@ where
     ///
     /// # Arguments
     /// * `relative` - true for relative (default), false for absolute
-    pub async fn set_vindpm_threshold_method(
-        &mut self,
-        relative: bool,
-    ) -> Result<(), PmuSensorError> {
+    pub fn set_vindpm_threshold_method(&mut self, relative: bool) -> Result<(), PmuSensorError> {
         if relative {
-            self.dev.clear_register_bit(0x0D, 7).await?;
+            self.dev.clear_register_bit(0x0D, 7)?;
         } else {
-            self.dev.set_register_bit(0x0D, 7).await?;
+            self.dev.set_register_bit(0x0D, 7)?;
         }
         Ok(())
     }
@@ -1126,16 +1096,16 @@ where
     ///
     /// # Arguments
     /// * `millivolt` - Voltage in mV (2600-15300mV in 100mV steps)
-    pub async fn set_vindpm_threshold(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
+    pub fn set_vindpm_threshold(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
         if millivolt % VINDPM_VOL_STEPS != 0 {
             return Err(PmuSensorError::VoltageStepInvalid100);
         }
 
         millivolt = millivolt.clamp(VINDPM_VOL_MIN, VINDPM_VOL_MAX);
-        let val = self.dev.read_register(0x0D).await?;
+        let val = self.dev.read_register(0x0D)?;
         let steps = ((millivolt - VINDPM_VOL_BASE) / VINDPM_VOL_STEPS) as u8;
         let new_val = (val & 0x80) | steps;
-        self.dev.write_register(&[0x0D, new_val]).await?;
+        self.dev.write_register(&[0x0D, new_val])?;
         Ok(())
     }
 
@@ -1144,14 +1114,14 @@ where
 
     /// Checks if thermal regulation is normal
     /// Returns true for normal operation, false if in thermal regulation
-    pub async fn is_thermal_regulation_normal(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x0E, 7).await?;
+    pub fn is_thermal_regulation_normal(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x0E, 7)?;
         Ok(!result)
     }
 
     /// Gets the battery voltage in millivolts
-    pub async fn get_battery_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let data: u8 = self.dev.read_register(0x0E).await?;
+    pub fn get_battery_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        let data: u8 = self.dev.read_register(0x0E)?;
         if data == 0 {
             return Ok(0);
         }
@@ -1169,8 +1139,8 @@ where
     // ADDC conversion of System Voltage (VSYS)
 
     /// Gets the system voltage in millivolts
-    pub async fn get_sys_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let data = self.dev.read_register(0x0F).await?;
+    pub fn get_sys_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        let data = self.dev.read_register(0x0F)?;
         let data = data & 0x7F;
         if data == 0 {
             return Ok(0);
@@ -1184,8 +1154,8 @@ where
     // ADC conversion of TS Voltage (TS) as percentage of REGN
 
     /// Gets the battery temperature in Celsius from the NTC thermistor
-    pub async fn get_temperature(&mut self) -> Result<f64, PmuSensorError> {
-        let data = self.dev.read_register(0x10).await?;
+    pub fn get_temperature(&mut self) -> Result<f64, PmuSensorError> {
+        let data = self.dev.read_register(0x10)?;
         let data = data & 0x7F;
         let ntc_percent = (data as f64) * 0.465_f64 + 21_f64;
 
@@ -1217,8 +1187,8 @@ where
     // ADC conversion of VBUS voltage (VBUS) , VBUS Good Status
 
     /// Gets the USB bus voltage in millivolts
-    pub async fn get_vbus_voltage(&mut self) -> Result<u16, PmuSensorError> {
-        let data = self.dev.read_register(0x11).await?;
+    pub fn get_vbus_voltage(&mut self) -> Result<u16, PmuSensorError> {
+        let data = self.dev.read_register(0x11)?;
 
         let vbus_attached = ((data >> 7) & 0x01) == 0;
         if vbus_attached {
@@ -1235,14 +1205,14 @@ where
 
     /// Gets the charge current in mA when VBAT > VBATSHORT
     /// Note: If the charger is disconnected, the register retains the last value
-    pub async fn get_charge_current(&mut self) -> Result<u16, PmuSensorError> {
+    pub fn get_charge_current(&mut self) -> Result<u16, PmuSensorError> {
         // If not charging, return 0
-        if self.get_charge_status().await? == ChargeStatus::NoCharge {
+        if self.get_charge_status()? == ChargeStatus::NoCharge {
             return Ok(0);
         }
 
         // Read register 0x12, which contains the ADC conversion result for charge current.
-        let val = self.dev.read_register(0x12).await?;
+        let val = self.dev.read_register(0x12)?;
 
         // In the C code:
         // volt = BQ2589X_ICHGR_BASE + ((val & BQ2589X_ICHGR_MASK) >> BQ2589X_ICHGR_SHIFT) * BQ2589X_ICHGR_LSB
@@ -1261,14 +1231,14 @@ where
     // VINDPM Status, IINDPM Status, Input Current Limit in effect while Input Current Optimizer
 
     /// Checks if Dynamic Power Management is active
-    pub async fn is_dynamic_power_management(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x13, 7).await?;
+    pub fn is_dynamic_power_management(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x13, 7)?;
         Ok(result)
     }
 
     /// Checks if Input Current Limit is active
-    pub async fn is_input_current_limit(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x13, 6).await?;
+    pub fn is_input_current_limit(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x13, 6)?;
         Ok(result)
     }
 
@@ -1276,7 +1246,7 @@ where
     ///
     /// # Arguments
     /// * `milliampere` - Current limit in mA
-    pub async fn set_input_current_limit_optimizer(
+    pub fn set_input_current_limit_optimizer(
         &mut self,
         mut milliampere: u16,
     ) -> Result<(), PmuSensorError> {
@@ -1285,10 +1255,10 @@ where
         }
 
         milliampere = milliampere.clamp(IN_CURRENT_OPT_MIN, IN_CURRENT_OPT_MAX);
-        let val = self.dev.read_register(0x13).await?;
+        let val = self.dev.read_register(0x13)?;
         let steps = ((milliampere - IN_CURRENT_OPT_MIN) / IN_CURRENT_OPT_STEP) as u8;
         let new_val = (val & 0x3F) | (steps << 6);
-        self.dev.write_register(&[0x13, new_val]).await?;
+        self.dev.write_register(&[0x13, new_val])?;
         Ok(())
     }
 
@@ -1296,69 +1266,60 @@ where
     // Register Reset, Input Current Optimizer (ICO) Status , Device Configuration, Temperature Profile, Device Revision: 10
 
     /// Resets the device to the default configuration
-    pub async fn reset_default(&mut self) -> Result<(), PmuSensorError> {
-        self.dev.set_register_bit(0x14, 7).await?;
+    pub fn reset_default(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x14, 7)?;
         Ok(())
     }
 
     /// Checks if Input Current Optimization is in progress
-    pub async fn is_input_current_optimizer(&mut self) -> Result<bool, PmuSensorError> {
-        let result = self.dev.get_register_bit(0x14, 6).await?;
+    pub fn is_input_current_optimizer(&mut self) -> Result<bool, PmuSensorError> {
+        let result = self.dev.get_register_bit(0x14, 6)?;
         Ok(result)
     }
 
     /// Gets the device configuration
-    pub async fn get_device_config(&mut self) -> Result<u8, PmuSensorError> {
-        let val = self.dev.read_register(0x14).await?;
+    pub fn get_device_config(&mut self) -> Result<u8, PmuSensorError> {
+        let val = self.dev.read_register(0x14)?;
         Ok((val >> 3) & 0x03)
     }
 
     /// Gets the chip ID
-    pub async fn get_chip_id(&mut self) -> Result<u8, PmuSensorError> {
-        let result = self.dev.read_register(0x14).await?;
+    pub fn get_chip_id(&mut self) -> Result<u8, PmuSensorError> {
+        let result = self.dev.read_register(0x14)?;
         Ok(result & 0x03)
     }
 
     /// Gets information about the PMU
-    pub async fn get_info(&mut self) -> Result<String, PmuSensorError> {
-        let is_vbus_present = self.is_vbus_in().await?;
+    pub fn get_info(&mut self) -> Result<String, PmuSensorError> {
+        let is_vbus_present = self.is_vbus_in()?;
 
         let is_vbus_present = match is_vbus_present {
             true => "Yes",
             false => "No",
         };
 
-        let mut text = format!("CHG state: {}\n", self.get_charge_status().await?);
+        let mut text = format!("CHG state: {}\n", self.get_charge_status()?);
 
         text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
-        text.push_str(&format!("Bus state: {}\n", self.get_bus_status().await?));
+        text.push_str(&format!("Bus state: {}\n", self.get_bus_status()?));
         text.push_str(&format!(
             "Battery voltage: {}mV\n",
-            self.get_battery_voltage().await?
+            self.get_battery_voltage()?
         ));
-        text.push_str(&format!(
-            "USB voltage: {}mV\n",
-            self.get_vbus_voltage().await?
-        ));
-        text.push_str(&format!(
-            "SYS voltage: {}mV\n",
-            self.get_sys_voltage().await?
-        ));
-        text.push_str(&format!(
-            "Temperature: {}°C\n",
-            self.get_temperature().await?
-        ));
+        text.push_str(&format!("USB voltage: {}mV\n", self.get_vbus_voltage()?));
+        text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage()?));
+        text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));
         text.push_str(&format!(
             "Charger fast charge curr.: {}mA\n",
-            self.get_fast_charge_current_limit().await?
+            self.get_fast_charge_current_limit()?
         ));
         text.push_str(&format!(
             "Charger target voltage: {}mV\n",
-            self.get_charge_target_voltage().await?
+            self.get_charge_target_voltage()?
         ));
         text.push_str(&format!(
             "Input curr. limit: {}mA\n",
-            self.get_input_current_limit().await?
+            self.get_input_current_limit()?
         ));
 
         Ok(text)
@@ -1395,7 +1356,7 @@ pub enum PmuSensorError {
 
 impl<E> From<E> for PmuSensorError
 where
-    E: embedded_hal_async::i2c::Error,
+    E: Error,
 {
     fn from(_: E) -> Self {
         PmuSensorError::I2CError

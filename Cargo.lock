@@ -75,13 +75,12 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "drivers",
- "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-sync",
  "embassy-time",
  "embedded-graphics-core",
- "embedded-hal-async",
+ "embedded-hal 1.0.0",
  "embedded-hal-bus",
  "esp-alloc",
  "esp-backtrace",
@@ -1063,7 +1062,6 @@ dependencies = [
  "bitflags 2.9.0",
  "defmt",
  "embedded-hal 1.0.0",
- "embedded-hal-async",
  "embedded-io",
  "libm",
  "num_enum",
@@ -1121,7 +1119,6 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41fea5ef5bed4d3468dfd44f5c9fa4cda8f54c86d4fb4ae683eacf9d39e2ea12"
 dependencies = [
- "defmt",
  "embassy-futures",
  "embassy-sync",
  "embassy-time",

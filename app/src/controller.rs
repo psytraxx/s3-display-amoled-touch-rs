@@ -44,30 +44,27 @@ impl<'a> Controller<'a> {
     pub async fn process_action(&mut self, action: Action) -> Result<(), ()> {
         match action {
             Action::RequestUpdate => {
-                let text = self.pmu.get_info().await.expect("failed to get info");
+                let text = self.pmu.get_info().expect("failed to get info");
                 self.app_window.set_text(text.into());
             }
             Action::ToggleCharger(state) => {
                 if state {
                     self.pmu
                         .set_charge_enabled()
-                        .await
                         .expect("set_charge_enable failed");
                 } else {
                     self.pmu
                         .set_charge_disabled()
-                        .await
                         .expect("set_charge_disabled failed");
                 }
 
                 let status = self
                     .pmu
                     .is_charge_enabled()
-                    .await
                     .expect("is_charge_enabled failed");
 
                 self.app_window.set_charging(!status);
-                let text = self.pmu.get_info().await.expect("failed to get info");
+                let text = self.pmu.get_info().expect("failed to get info");
                 self.app_window.set_text(text.into());
             }
         }

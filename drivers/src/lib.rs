@@ -5,7 +5,7 @@
 //! and power path management. It includes functions for configuring and
 //! monitoring the charging process.
 
-use embedded_hal_async::i2c::I2c;
+use embedded_hal::i2c::I2c;
 
 /// BQ25896 battery charging and power path management IC driver.
 pub mod bq25896;
@@ -32,42 +32,40 @@ where
         Self { i2c, adr }
     }
 
-    pub async fn read_register_buffer(
+    pub fn read_register_buffer(
         &mut self,
         register: u8,
         buffer: &mut [u8],
     ) -> Result<(), I2C::Error> {
-        self.i2c.write_read(self.adr, &[register], buffer).await?;
+        self.i2c.write_read(self.adr, &[register], buffer)?;
         Ok(())
     }
 
-    pub async fn read_register(&mut self, register: u8) -> Result<u8, I2C::Error> {
+    pub fn read_register(&mut self, register: u8) -> Result<u8, I2C::Error> {
         let mut buffer = [0];
-        self.i2c
-            .write_read(self.adr, &[register], &mut buffer)
-            .await?;
+        self.i2c.write_read(self.adr, &[register], &mut buffer)?;
         Ok(buffer[0])
     }
 
-    pub async fn write_register(&mut self, register_and_data: &[u8]) -> Result<(), I2C::Error> {
-        self.i2c.write(self.adr, register_and_data).await
+    pub fn write_register(&mut self, register_and_data: &[u8]) -> Result<(), I2C::Error> {
+        self.i2c.write(self.adr, register_and_data)
     }
 
-    pub async fn set_register_bit(&mut self, register: u8, bit: u8) -> Result<(), I2C::Error> {
-        let val = self.read_register(register).await?;
+    pub fn set_register_bit(&mut self, register: u8, bit: u8) -> Result<(), I2C::Error> {
+        let val = self.read_register(register)?;
         let data = val | (1 << bit);
-        self.write_register(&[register, data]).await
+        self.write_register(&[register, data])
     }
 
-    pub async fn get_register_bit(&mut self, register: u8, bit: u8) -> Result<bool, I2C::Error> {
-        let val = self.read_register(register).await?;
+    pub fn get_register_bit(&mut self, register: u8, bit: u8) -> Result<bool, I2C::Error> {
+        let val = self.read_register(register)?;
         Ok((val & (1 << bit)) != 0)
     }
 
-    pub async fn clear_register_bit(&mut self, register: u8, bit: u8) -> Result<(), I2C::Error> {
-        let val = self.read_register(register).await?;
+    pub fn clear_register_bit(&mut self, register: u8, bit: u8) -> Result<(), I2C::Error> {
+        let val = self.read_register(register)?;
         let data = val & !(1 << bit);
-        self.write_register(&[register, data]).await
+        self.write_register(&[register, data])
     }
 }
 
