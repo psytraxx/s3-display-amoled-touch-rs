@@ -25,7 +25,6 @@ use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
 use esp_hal::time::Rate;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
-use esp_hal::xtensa_lx::singleton;
 use esp_hal::{dma_buffers, uart, Blocking};
 use esp_hal_embassy::main;
 use mipidsi::interface::SpiInterface;
@@ -162,9 +161,9 @@ fn initialize_i2c(
         .with_sda(sda)
         .with_scl(scl);
 
-    // Wrap the I2C instance in an AtomicCell for safe shared access across tasks
-    singleton!(:AtomicCell<I2c<'_, Blocking>> = AtomicCell::new(i2c))
-        .expect("Failed to create I2C mutex")
+    // Use a StaticCell for static storage of the AtomicCell wrapping the I2C instance
+    static I2C_INSTANCE: StaticCell<AtomicCell<I2c<'static, Blocking>>> = StaticCell::new();
+    I2C_INSTANCE.init(AtomicCell::new(i2c))
 }
 
 /// Configures the touch sensor driver (CST816S) by wrapping the I2C bus and input pin.
