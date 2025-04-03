@@ -12,4 +12,4 @@ slint = { version = "1.10.0", default-features = false, features = [
 ] }
 
 [build-dependencies]
-slint-build = "1.9.1"
+slint-build = "1.10.0"
