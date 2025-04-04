@@ -242,6 +242,8 @@ pub enum LD2410Error {
     InvalidTail,
     TooLarge(usize),
     InvalidData,
+    /// Failed to enter or exit configuration mode
+    ConfigModeError,
 }
 
 impl<E> From<embedded_io::ReadExactError<E>> for LD2410Error
@@ -278,7 +280,7 @@ where
 
     // Public API
     /// Reads a data frame (header, length, payload, tail) and decodes it.
-    pub fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
+    pub fn get_radar_data(&mut self) -> Result<RadarData, LD2410Error> {
         let mut header = [0u8; 4];
         self.uart.read_exact(&mut header)?;
         if header != DATA_HEADER {
@@ -301,7 +303,8 @@ where
             return Err(LD2410Error::InvalidTail);
         }
 
-        Ok(self.decode_data_frame(&self.buf[..len]))
+        // Decode the frame, propagating potential InvalidData errors
+        self.decode_data_frame(&self.buf[..len])
     }
 
     pub fn get_firmware_version(&mut self) -> Result<Option<FirmwareVersion>, LD2410Error> {
@@ -423,23 +426,51 @@ where
     }
 
     // Private helper methods
-    fn decode_data_frame(&self, buf: &[u8]) -> Option<RadarData> {
-        // we receive 13 bytes of data - first byte is data value byte
-        // second byte is the head and 11 and 12 tail and check
+
+    // Helper method to get a slice from the buffer
+    fn _get_slice(buf: &[u8], range: core::ops::Range<usize>) -> Result<&[u8], LD2410Error> {
+        buf.get(range).ok_or(LD2410Error::InvalidData)
+    }
+
+    // Helper method to get a byte from the buffer
+    fn _get_byte(buf: &[u8], index: usize) -> Result<&u8, LD2410Error> {
+        buf.get(index).ok_or(LD2410Error::InvalidData)
+    }
+
+    // Helper method to parse u16 from the buffer
+    fn _parse_u16(buf: &[u8], range: core::ops::Range<usize>) -> Result<u16, LD2410Error> {
+        let slice = Self::_get_slice(buf, range)?;
+        let bytes: [u8; 2] = slice.try_into().map_err(|_| LD2410Error::InvalidData)?;
+        Ok(u16::from_le_bytes(bytes))
+    }
+
+    /// Decodes a raw data frame buffer into RadarData.
+    fn decode_data_frame(&self, buf: &[u8]) -> Result<RadarData, LD2410Error> {
+        // Check minimum length and fixed bytes
         if buf.len() < 13 || buf[0] != 0x02 || buf[1] != 0xAA || buf[11] != 0x55 || buf[12] != 0x00
         {
-            return None;
+            #[cfg(feature = "defmt")]
+            warn!("Invalid data frame structure or fixed bytes.");
+            return Err(LD2410Error::InvalidData);
         }
 
-        let target_status = buf[2];
-        let movement_target_distance = u16::from_le_bytes(buf[3..5].try_into().ok()?);
-        let movement_target_energy = buf[5];
-        let stationary_target_distance = u16::from_le_bytes(buf[6..8].try_into().ok()?);
-        let stationary_target_energy = buf[8];
-        let detection_distance = u16::from_le_bytes(buf[9..11].try_into().ok()?);
+        // Parse fields using helper methods
+        let target_status = *Self::_get_byte(buf, 2)?;
+        let movement_target_distance = Self::_parse_u16(buf, 3..5)?;
+        let movement_target_energy = *Self::_get_byte(buf, 5)?;
+        let stationary_target_distance = Self::_parse_u16(buf, 6..8)?;
+        let stationary_target_energy = *Self::_get_byte(buf, 8)?;
+        let detection_distance = Self::_parse_u16(buf, 9..11)?;
 
-        Some(RadarData {
-            target_state: TargetState::try_from(target_status).expect("Invalid target state"),
+        // Try to convert target state
+        let target_state = TargetState::try_from(target_status).map_err(|_| {
+            #[cfg(feature = "defmt")]
+            warn!("Invalid target state value: {}", target_status);
+            LD2410Error::InvalidData
+        })?;
+
+        Ok(RadarData {
+            target_state,
             movement_target_distance,
             stationary_target_distance,
             detection_distance,
@@ -483,13 +514,13 @@ where
     fn execute_command(&mut self, command: Command) -> Result<Option<Vec<u8>>, LD2410Error> {
         self.uart
             .write_all(&CMD_HEADER)
-            .expect("Failed to write command header");
+            .map_err(|_| LD2410Error::IoError)?;
         self.uart
             .write_all(command.payload())
-            .expect("Failed to write command payload");
+            .map_err(|_| LD2410Error::IoError)?;
         self.uart
             .write_all(&CMD_TAIL)
-            .expect("Failed to write command tail");
+            .map_err(|_| LD2410Error::IoError)?;
 
         let expected_ack = command.expected_ack();
         let mut elapsed_ms = 0;
@@ -532,15 +563,28 @@ where
     where
         F: FnOnce(&mut Self) -> Result<Option<T>, LD2410Error>,
     {
-        if self.enter_configuration_mode()? {
-            self.delay.delay_ms(50);
-            let res = op(self)?;
-            self.leave_configuration_mode()?;
-            Ok(res)
-        } else {
+        // Attempt to enter configuration mode. If it fails, propagate the error.
+        if !self.enter_configuration_mode()? {
             #[cfg(feature = "defmt")]
-            warn!("Failed to enter configuration mode");
-            Ok(None)
+            warn!("Failed to enter configuration mode, skipping operation.");
+            return Err(LD2410Error::ConfigModeError);
         }
+
+        self.delay.delay_ms(50); // Wait after entering config mode
+
+        // Execute the provided operation. Propagate its error if it fails.
+        let result = op(self)?;
+
+        // Attempt to leave configuration mode.
+        if !self.leave_configuration_mode()? {
+            #[cfg(feature = "defmt")]
+            warn!("Failed to leave configuration mode after operation.");
+            // Optionally return ConfigModeError here as well if leaving is critical
+            // return Err(LD2410Error::ConfigModeError);
+        }
+
+        // If op returned Some(T), wrap it in Ok(Some(T))
+        // If op returned None, wrap it in Ok(None)
+        Ok(result)
     }
 }
