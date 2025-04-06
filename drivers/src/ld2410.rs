@@ -330,7 +330,7 @@ where
             let res = this.execute_command(Command::RequestRestart)?;
             if res.is_some() {
                 #[cfg(feature = "defmt")]
-                println!("Restart request successful");
+                info!("Restart request successful");
                 this.delay.delay_ms(50);
             }
             Ok(res)
@@ -343,7 +343,7 @@ where
             let res = this.execute_command(Command::RequestFactoryReset)?;
             if res.is_some() {
                 #[cfg(feature = "defmt")]
-                println!("Factory reset request successful");
+                info!("Factory reset request successful");
                 this.delay.delay_ms(50);
             } else {
                 #[cfg(feature = "defmt")]
@@ -399,7 +399,7 @@ where
         #[cfg(feature = "defmt")]
         {
             if res.is_some() {
-                println!("Start Engineering Mode successful");
+                info!("Start Engineering Mode successful");
             } else {
                 warn!("Start Engineering Mode failed");
             }
@@ -414,7 +414,7 @@ where
         #[cfg(feature = "defmt")]
         {
             if res.is_some() {
-                println!("End Engineering Mode successful");
+                info!("End Engineering Mode successful");
             } else {
                 warn!("End Engineering Mode failed");
             }
