@@ -1,6 +1,6 @@
 use alloc::rc::Rc;
-use defmt::error;
 use embassy_time::Timer;
+use esp_println::println;
 use slint::{
     platform::{
         software_renderer::{MinimalSoftwareWindow, Rgb565Pixel},
@@ -77,7 +77,7 @@ async fn process_touch(
                 .expect("Event dispatch failed");
         }
         Err(e) => {
-            error!("Touch read error: {:?}", e);
+            println!("Touch read error: {:?}", e);
         }
     }
 

@@ -1,6 +1,6 @@
 use alloc::rc::Rc;
-use defmt::info;
 use embassy_time::Instant;
+use esp_println::println;
 use slint::{
     platform::{software_renderer::MinimalSoftwareWindow, Platform, WindowAdapter},
     PlatformError,
@@ -19,7 +19,7 @@ impl Backend {
 impl Platform for Backend {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
         let window = self.window.clone();
-        info!("Creating window adapter");
+        println!("Creating window adapter");
         Ok(window)
     }
 

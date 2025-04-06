@@ -1,5 +1,5 @@
-use defmt::info;
 use embassy_time::Timer;
+use esp_println::println;
 
 use crate::RadarSensor;
 
@@ -9,14 +9,14 @@ pub async fn radar_task(mut radar: RadarSensor) {
     let version = radar
         .request_factory_reset()
         .expect("Failed to request factory reset");
-    info!("Factory reset: {:?}", version); */
+    println!("Factory reset: {:?}", version); */
 
     let version = radar
         .get_firmware_version()
         .expect("Failed to request radar restart");
 
     if let Some(v) = version {
-        info!("Firmware version: {}", v);
+        println!("Firmware version: {}", v);
     }
 
     let config = radar
@@ -24,11 +24,11 @@ pub async fn radar_task(mut radar: RadarSensor) {
         .expect("Failed to request current configuration");
 
     if let Some(c) = config {
-        info!("Current configuration: {}", c);
+        println!("Current configuration: {}", c);
     }
     loop {
         if let Ok(Some(event)) = radar.get_radar_data() {
-            info!("Radar data: {:?}", event);
+            println!("Radar data: {:?}", event);
         }
         Timer::after_millis(100).await
     }

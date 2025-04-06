@@ -45,21 +45,21 @@ use drivers::{BQ25896, LD2410, CST816S};
 let mut pmu = BQ25896::new(i2c_bus, 0x6B)?;
 pmu.set_input_current_limit(1000)?;
 let current_limit = pmu.get_input_current_limit()?;
-defmt::info!("Input current limit: {} mA", current_limit);
+defmt::println!("Input current limit: {} mA", current_limit);
 
 // --- 24GHz Radar Sensor (HLK-LD2410) ---
 let mut radar = LD2410::new(uart, delay);
 // Request firmware version from the radar sensor.
 match radar.request_firmware_version() {
-    Ok(Some(firmware)) => defmt::info!("Radar firmware version: {}", firmware),
+    Ok(Some(firmware)) => defmt::println!("Radar firmware version: {}", firmware),
     Ok(None) => defmt::warn!("No radar firmware info received."),
-    Err(e) => defmt::error!("Radar error: {:?}", e),
+    Err(e) => defmt::println!("Radar error: {:?}", e),
 }
 
 // --- Touch Sensor (CST816S) ---
 let mut touch_sensor = CST816S::new(i2c_bus, touch_int_pin);
 if let Ok(Some(touch_data)) = touch_sensor.read_touch(true) {
-    defmt::info!("Touch event: {:?}", touch_data);
+    defmt::println!("Touch event: {:?}", touch_data);
 } else {
     defmt::debug!("No touch detected at this time.");
 }

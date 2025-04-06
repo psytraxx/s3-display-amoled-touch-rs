@@ -1,3 +1,5 @@
+use core::fmt::Display;
+
 use alloc::vec::Vec;
 #[cfg(feature = "defmt")]
 use defmt::{debug, info, warn, Format};
@@ -22,6 +24,12 @@ pub struct FirmwareVersion {
     pub bugfix: u32,
 }
 
+impl Display for FirmwareVersion {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.bugfix)
+    }
+}
+
 #[cfg(feature = "defmt")]
 impl Format for FirmwareVersion {
     fn format(&self, f: defmt::Formatter) {
@@ -37,6 +45,21 @@ pub struct RadarConfiguration {
     pub motion_sensitivity: [u8; 9],
     pub stationary_sensitivity: [u8; 9],
     pub sensor_idle_time: u16,
+}
+
+impl Display for RadarConfiguration {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "RadarConfiguration {{ max_gate: {}, max_moving_gate: {}, max_stationary_gate: {}, idle_time: {}s, motion_sensitivity: {:?}, stationary_sensitivity: {:?} }}",
+            self.max_gate,
+            self.max_moving_gate,
+            self.max_stationary_gate,
+            self.sensor_idle_time,
+            &self.motion_sensitivity[..],
+            &self.stationary_sensitivity[..]
+        )
+    }
 }
 
 #[cfg(feature = "defmt")]
