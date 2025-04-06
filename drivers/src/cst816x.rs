@@ -1,3 +1,5 @@
+use core::fmt::{Display, Formatter};
+
 // https://github.com/fbiego/CST816S
 use bitflags::bitflags;
 use embedded_hal::i2c::I2c;
@@ -40,6 +42,15 @@ pub enum Event {
 pub enum ChipID {
     CST816S = 0xB4,
     CST816T = 0xB5,
+}
+
+impl Display for ChipID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ChipID::CST816S => write!(f, "CST816S"),
+            ChipID::CST816T => write!(f, "CST816T"),
+        }
+    }
 }
 
 #[derive(Debug)]

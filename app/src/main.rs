@@ -5,7 +5,6 @@
 extern crate alloc;
 use alloc::boxed::Box;
 use controller::Controller;
-use defmt::{error, info};
 use drivers::bq25896::BQ25896;
 use drivers::cst816x::{CST816x, IrqControl};
 use drivers::ld2410::LD2410;
@@ -16,6 +15,7 @@ use embedded_hal_bus::i2c::AtomicDevice;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_hal_bus::util::AtomicCell;
 use esp_alloc::psram_allocator;
+use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_hal::dma::{DmaChannel0, DmaTxBuf};
 use esp_hal::gpio::{GpioPin, Input, InputConfig, Level, Output, OutputConfig, Pull};
@@ -27,6 +27,7 @@ use esp_hal::time::Rate;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
 use esp_hal::{dma_buffers, uart, Blocking};
 use esp_hal_embassy::main;
+use esp_println::println;
 use mipidsi::interface::SpiInterface;
 use mipidsi::models::RM67162;
 use mipidsi::options::{Orientation, Rotation};
@@ -38,7 +39,6 @@ use slint::{ComponentHandle, PhysicalSize};
 use slint_backend::Backend;
 use slint_generated::AppWindow;
 use static_cell::StaticCell;
-use {defmt_rtt as _, esp_backtrace as _};
 
 mod controller;
 mod display_line_buffer;
@@ -88,7 +88,7 @@ async fn main(spawner: Spawner) {
     // Set up the timer group for the embassy executor
     let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
     esp_hal_embassy::init(timg0.timer0);
-    info!("Embassy initialized!");
+    println!("Embassy initialized!");
 
     // Initialize the PSRAM allocator for extra memory requirements
     psram_allocator!(peripherals.PSRAM, esp_hal::psram);
@@ -96,7 +96,7 @@ async fn main(spawner: Spawner) {
     // Enable the power management IC by setting the PMICEN pin high
     let mut pmicen = Output::new(peripherals.GPIO38, Level::Low, OutputConfig::default());
     pmicen.set_high();
-    info!("PMICEN set high");
+    println!("PMICEN set high");
 
     // Initialize the I2C bus used by several peripherals
     let i2c_bus = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
@@ -186,20 +186,20 @@ async fn initialize_touchpad(
     let irq_config = touchpad
         .get_irq_control()
         .expect("Failed to get IRQ control");
-    info!("IRQ control: 0x{:X}", irq_config.bits());
+    println!("IRQ control: 0x{:X}", irq_config.bits());
     let chip_id = touchpad.get_chip_id().expect("Failed to get chip ID");
-    info!("Touchpad chip ID: {}", chip_id);
+    println!("Touchpad chip ID: {}", chip_id);
     let motion_mask = touchpad
         .get_motion_mask()
         .expect("Failed to get motion mask");
-    info!("Motion mask: 0x{:X}", motion_mask);
+    println!("Motion mask: 0x{:X}", motion_mask);
     touchpad
         .set_irq_pulse_width(10)
         .expect("Failed to set pulse width");
     let pulse_config = touchpad
         .get_irq_pulse_width()
         .expect("Failed to get pulse config");
-    info!("Pulse width: {:?}", pulse_config);
+    println!("Pulse width: {:?}", pulse_config);
 
     touchpad
 }
@@ -292,12 +292,12 @@ fn detect_spi_model(i2c_ref_cell: &'static AtomicCell<I2c<'static, Blocking>>) {
     if i2c.write(0x15, &[]).is_ok() {
         // Check a secondary address to distinguish between SPI and QSPI models
         if i2c.write(0x51, &[]).is_ok() {
-            info!("Detected 1.91-inch SPI board model!");
+            println!("Detected 1.91-inch SPI board model!");
         } else {
-            info!("Detected 1.91-inch QSPI board model!");
+            println!("Detected 1.91-inch QSPI board model!");
         }
     } else {
-        error!("Unable to detect 1.91-inch touch board model!");
+        println!("Unable to detect 1.91-inch touch board model!");
     }
 }
 
@@ -326,82 +326,82 @@ async fn initialize_pmu(i2c_ref_cell: &'static AtomicCell<I2c<'static, Blocking>
     // Enable ADC for power measurement in the PMU
     pmu.set_adc_enabled().expect("set_adc_enabled failed");
 
-    info!(
+    println!(
         "Fast charge current limit: {}",
         pmu.get_fast_charge_current_limit()
             .expect("get_fast_charge_current_limit failed")
     );
 
-    info!(
+    println!(
         "Precharge current: {}",
         pmu.get_precharge_current()
             .expect("get_precharge_current failed")
     );
 
-    info!(
+    println!(
         "Charge target voltage: {}",
         pmu.get_charge_target_voltage()
             .expect("get_charge_target_voltage failed")
     );
 
-    info!(
+    println!(
         "Boost frequency:  {}",
         pmu.get_boost_freq().expect("get_boost_freq failed")
     );
 
-    info!(
+    println!(
         "Fast charge timer: {}",
         pmu.get_fast_charge_timer()
             .expect("get_fast_charge_timer failed")
     );
 
-    info!(
+    println!(
         "Termination curr.: {}mA",
         pmu.get_termination_current()
             .expect("get_termination_current failed")
     );
 
-    info!(
+    println!(
         "Power down voltage: {}mV",
         pmu.get_sys_power_down_voltage()
             .expect("get_sys_power_down_voltage failed")
     );
 
-    info!(
+    println!(
         "Automatic input detection: {}",
         pmu.is_automatic_input_detection_enabled()
             .expect("is_automatic_input_detection_enabled failed")
     );
 
-    info!(
+    println!(
         "HIZ mode: {}",
         pmu.is_hiz_mode().expect("is_hiz_mode failed")
     );
 
-    info!(
+    println!(
         "Charging safety timer: {}",
         pmu.is_charging_safety_timer_enabled()
             .expect("is_charging_safety_timer_enabled failed")
     );
 
-    info!(
+    println!(
         "Input detection enabled: {}",
         pmu.is_input_detection_enabled()
             .expect("is_input_detection_enabled failed")
     );
 
-    info!(
+    println!(
         "Input current optimizer: {}",
         pmu.is_input_current_optimizer()
             .expect("is_input_current_optimizer failed")
     );
 
-    info!(
+    println!(
         "PMU chip id: {}",
         pmu.get_chip_id().expect("get_chip_id failed")
     );
 
-    info!(
+    println!(
         "Charge current: {}mA",
         pmu.get_charge_current().expect("get_charge_current failed")
     );

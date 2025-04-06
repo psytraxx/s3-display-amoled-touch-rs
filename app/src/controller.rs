@@ -1,5 +1,5 @@
-use defmt::{error, info, warn};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use esp_println::println;
 use slint_generated::AppWindow;
 
 use crate::Charger;
@@ -9,7 +9,7 @@ pub struct Controller<'a> {
     pmu: Charger,
 }
 
-#[derive(defmt::Format, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Action {
     RequestUpdate,
     ToggleCharger(bool),
@@ -29,13 +29,13 @@ impl<'a> Controller<'a> {
 
         loop {
             let action = ACTION.receive().await;
-            info!("process action {}", &action);
+            println!("process action {:?}", &action);
             match self.process_action(action).await {
                 Ok(()) => {
                     // all good
                 }
                 Err(e) => {
-                    error!("process action: {:?}", e);
+                    println!("process action: {:?}", e);
                 }
             }
         }
@@ -88,7 +88,7 @@ pub fn send_action(a: Action) {
         }
         Err(a) => {
             // this could happen because the controller is slow to respond or we are making too many requests
-            warn!("user action queue full, could not add: {:?}", a)
+            println!("user action queue full, could not add: {:?}", a)
         }
     }
 }
