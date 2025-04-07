@@ -16,6 +16,12 @@ const DATA_TAIL: [u8; 4] = [0xF8, 0xF7, 0xF6, 0xF5];
 const CMD_HEADER: [u8; 4] = [0xFD, 0xFC, 0xFB, 0xFA];
 const CMD_TAIL: [u8; 4] = [0x04, 0x03, 0x02, 0x01];
 
+// Data Frame Constants (used in decode_data_frame)
+const DATA_FRAME_TYPE: u8 = 0x02;
+const DATA_FRAME_HEAD: u8 = 0xAA;
+const DATA_FRAME_END1: u8 = 0x55;
+const DATA_FRAME_END2: u8 = 0x00;
+
 // Data Types
 #[derive(Debug, Clone, Copy)]
 pub struct FirmwareVersion {
@@ -312,17 +318,13 @@ where
             .map(|opt_data| {
                 opt_data.and_then(|data| {
                     if data.len() < 8 {
-                        return None;
+                        return None; // Need at least 8 bytes for version info
                     }
-                    let bugfix = (data[7] as u32) * 1000000
-                        + (data[6] as u32) * 10000
-                        + (data[5] as u32) * 100
-                        + (data[4] as u32);
-
+                    // Indices: 2=minor, 3=major, 4-7=bugfix (reversed BCD-like)
                     Some(FirmwareVersion {
                         major: data[3],
                         minor: data[2],
-                        bugfix,
+                        bugfix: Self::decode_firmware_bugfix(&data[4..8]),
                     })
                 })
             })
@@ -425,29 +427,45 @@ where
         Ok(res.is_some())
     }
 
-    // Private helper methods
+    // --- Private Helper Methods ---
 
-    // Helper method to get a slice from the buffer
-    fn _get_slice(buf: &[u8], range: core::ops::Range<usize>) -> Result<&[u8], LD2410Error> {
+    /// Helper method to safely get a slice from a buffer.
+    fn get_slice(buf: &[u8], range: core::ops::Range<usize>) -> Result<&[u8], LD2410Error> {
         buf.get(range).ok_or(LD2410Error::InvalidData)
     }
 
-    // Helper method to get a byte from the buffer
-    fn _get_byte(buf: &[u8], index: usize) -> Result<&u8, LD2410Error> {
-        buf.get(index).ok_or(LD2410Error::InvalidData)
+    /// Helper method to safely get a byte from a buffer.
+    fn get_byte(buf: &[u8], index: usize) -> Result<u8, LD2410Error> {
+        buf.get(index).copied().ok_or(LD2410Error::InvalidData)
     }
 
-    // Helper method to parse u16 from the buffer
-    fn _parse_u16(buf: &[u8], range: core::ops::Range<usize>) -> Result<u16, LD2410Error> {
-        let slice = Self::_get_slice(buf, range)?;
+    /// Helper method to safely parse a u16 (little-endian) from a buffer slice.
+    fn parse_u16(buf: &[u8], range: core::ops::Range<usize>) -> Result<u16, LD2410Error> {
+        let slice = Self::get_slice(buf, range)?;
         let bytes: [u8; 2] = slice.try_into().map_err(|_| LD2410Error::InvalidData)?;
         Ok(u16::from_le_bytes(bytes))
+    }
+
+    /// Decodes the bugfix part of the firmware version from its 4-byte representation.
+    /// The format seems to be a reversed BCD-like structure. Example: 0x23 0x01 0x08 0x01 -> 1080123
+    fn decode_firmware_bugfix(bytes: &[u8]) -> u32 {
+        if bytes.len() != 4 {
+            return 0; // Or handle error appropriately
+        }
+        (bytes[3] as u32) * 1_000_000
+            + (bytes[2] as u32) * 10_000
+            + (bytes[1] as u32) * 100
+            + (bytes[0] as u32)
     }
 
     /// Decodes a raw data frame buffer into RadarData.
     fn decode_data_frame(&self, buf: &[u8]) -> Result<RadarData, LD2410Error> {
         // Check minimum length and fixed bytes
-        if buf.len() < 13 || buf[0] != 0x02 || buf[1] != 0xAA || buf[11] != 0x55 || buf[12] != 0x00
+        if buf.len() < 13
+            || Self::get_byte(buf, 0)? != DATA_FRAME_TYPE
+            || Self::get_byte(buf, 1)? != DATA_FRAME_HEAD
+            || Self::get_byte(buf, 11)? != DATA_FRAME_END1
+            || Self::get_byte(buf, 12)? != DATA_FRAME_END2
         {
             #[cfg(feature = "defmt")]
             warn!("Invalid data frame structure or fixed bytes.");
@@ -455,14 +473,14 @@ where
         }
 
         // Parse fields using helper methods
-        let target_status = *Self::_get_byte(buf, 2)?;
-        let movement_target_distance = Self::_parse_u16(buf, 3..5)?;
-        let movement_target_energy = *Self::_get_byte(buf, 5)?;
-        let stationary_target_distance = Self::_parse_u16(buf, 6..8)?;
-        let stationary_target_energy = *Self::_get_byte(buf, 8)?;
-        let detection_distance = Self::_parse_u16(buf, 9..11)?;
+        let target_status = Self::get_byte(buf, 2)?;
+        let movement_target_distance = Self::parse_u16(buf, 3..5)?;
+        let movement_target_energy = Self::get_byte(buf, 5)?;
+        let stationary_target_distance = Self::parse_u16(buf, 6..8)?;
+        let stationary_target_energy = Self::get_byte(buf, 8)?;
+        let detection_distance = Self::parse_u16(buf, 9..11)?;
 
-        // Try to convert target state
+        // Try to convert target state (already checked bounds with get_byte)
         let target_state = TargetState::try_from(target_status).map_err(|_| {
             #[cfg(feature = "defmt")]
             warn!("Invalid target state value: {}", target_status);
