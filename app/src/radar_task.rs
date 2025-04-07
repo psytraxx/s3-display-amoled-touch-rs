@@ -11,25 +11,28 @@ pub async fn radar_task(mut radar: RadarSensor) {
         .expect("Failed to request factory reset");
     println!("Factory reset: {:?}", version); */
 
-    let version = radar
-        .get_firmware_version()
-        .expect("Failed to request radar restart");
-
-    if let Some(v) = version {
-        println!("Firmware version: {}", v);
+    match radar.get_firmware_version() {
+        Ok(Some(v)) => println!("Firmware version: {}", v),
+        Ok(None) => println!("Could not retrieve firmware version (sensor returned None)."),
+        Err(e) => println!("Failed to get firmware version: {:?}", e),
     }
 
-    let config = radar
-        .get_configuration()
-        .expect("Failed to request current configuration");
-
-    if let Some(c) = config {
-        println!("Current configuration: {}", c);
+    match radar.get_configuration() {
+        Ok(Some(c)) => println!("Current configuration: {}", c),
+        Ok(None) => println!("Could not retrieve configuration (sensor returned None)."),
+        Err(e) => println!("Failed to get configuration: {:?}", e),
     }
+
     loop {
-        if let Ok(Some(event)) = radar.get_radar_data() {
-            println!("Radar data: {:?}", event);
+        match radar.get_radar_data() {
+            Ok(event) => {
+                println!("Radar data: {:?}", event);
+            }
+            Err(e) => {
+                // Log other specific errors
+                println!("Radar error: {:?}", e);
+            }
         }
-        Timer::after_millis(100).await
+        Timer::after_millis(100).await;
     }
 }
