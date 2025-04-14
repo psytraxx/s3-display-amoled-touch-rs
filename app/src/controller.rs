@@ -58,12 +58,8 @@ impl<'a> Controller<'a> {
                         .expect("set_charge_disabled failed");
                 }
 
-                let status = self
-                    .pmu
-                    .is_charge_enabled()
-                    .expect("is_charge_enabled failed");
+                println!("set_charge_enabled: {:?}", state);
 
-                self.app_window.set_charging(!status);
                 let text = self.pmu.get_info().expect("failed to get info");
                 self.app_window.set_text(text.into());
             }

@@ -3,7 +3,7 @@ import { Theme, Toggle } from "common.slint";
 
 export component AppWindow inherits Window {
     in-out property <string> text: "Please touch the button \nto update the PMU reading";
-    in-out property <bool> charging: false;
+    in-out property <bool> charging: true;
     in property <image> status-icon: @image-url("../assets/battery.png");
 
     width: 536px;
@@ -56,7 +56,7 @@ export component AppWindow inherits Window {
             Toggle {
                 on: root.charging;
                 clicked => {
-                    root.toggle-charger(self.on);
+                    root.toggle-charger(!self.on);
                 }
             }
         }
