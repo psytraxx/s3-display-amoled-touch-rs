@@ -24,14 +24,14 @@ pub async fn render_task(
     let line_buffer = &mut [Rgb565Pixel(0); DISPLAY_WIDTH as usize];
 
     let mut buffer_provider = DisplayLineBuffer::new(display, line_buffer);
-    let mut last_touch_down: Option<LogicalPosition> = None; // Track if finger is currently down
+    let mut last_touch: Option<LogicalPosition> = None;
 
     loop {
         // Update timers and animations
         slint::platform::update_timers_and_animations();
 
         // process touchscreen events
-        process_touch(&mut touchpad, &mut last_touch_down, window.clone()).await;
+        process_touch(&mut touchpad, &mut last_touch, window.clone()).await;
 
         // Draw the scene if something needs to be drawn
         let is_dirty = window.draw_if_needed(|renderer| {
