@@ -46,7 +46,7 @@ pub async fn render_task(
 
 async fn process_touch(
     touch: &mut Touchpad,
-    last_touch_down: &mut Option<LogicalPosition>,
+    last_touch: &mut Option<LogicalPosition>,
     window: Rc<MinimalSoftwareWindow>,
 ) {
     // Check if a touch is available
@@ -75,19 +75,19 @@ async fn process_touch(
             let event = match point.event {
                 Event::Down => {
                     // Only send Pressed if not already down
-                    if last_touch_down.is_none() {
-                        last_touch_down.replace(position);
+                    if last_touch.is_none() {
+                        last_touch.replace(position);
                         Some(WindowEvent::PointerPressed { position, button })
                     } else {
                         // Already pressed, treat as move? Or ignore? Let's treat as move.
-                        last_touch_down.replace(position);
+                        last_touch.replace(position);
                         Some(WindowEvent::PointerMoved { position })
                     }
                 }
                 Event::Contact => {
                     // Send Moved only if currently pressed
-                    if last_touch_down.is_some() {
-                        last_touch_down.replace(position);
+                    if last_touch.is_some() {
+                        last_touch.replace(position);
                         Some(WindowEvent::PointerMoved { position })
                     } else {
                         None
@@ -95,7 +95,7 @@ async fn process_touch(
                 }
                 Event::Up => {
                     // Send Released only if currently pressed
-                    if last_touch_down.take().is_some() {
+                    if last_touch.take().is_some() {
                         // Use the last known down position for release? Or current point's position?
                         // Slint usually expects the position where the release occurred.
                         Some(WindowEvent::PointerReleased { position, button })
@@ -118,5 +118,4 @@ async fn process_touch(
             println!("Touch read error: {:?}", e);
         }
     }
-    // Removed the unconditional release logic from here
 }
