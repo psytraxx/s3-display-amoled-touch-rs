@@ -86,7 +86,6 @@ impl Default for IrqControl {
 }
 
 bitflags! {
-    #[derive(Default)]
     pub struct MotionMask: u8 {
         /// Enable double-click detection
         const DOUBLE_CLICK = 1 << 0;
@@ -96,6 +95,14 @@ bitflags! {
         const CONTINUOUS_LEFTRIGHT = 1 << 2;
     }
 }
+
+impl Default for MotionMask {
+    fn default() -> Self {
+        // Default to enabling double-click, matching the C++ library's begin()
+        MotionMask::DOUBLE_CLICK
+    }
+}
+
 #[cfg(feature = "defmt")]
 impl defmt::Format for MotionMask {
     fn format(&self, f: defmt::Formatter) {
@@ -306,23 +313,24 @@ where
     }
 
     pub fn read_touch(&mut self) -> Result<TouchData, TouchSensorError> {
-        let mut buffer = [0u8; 13];
+        // Read 7 bytes starting from register 0x01, matching C++ implementation
+        let mut buffer = [0u8; 7];
+        self.dev.read_register_buffer(0x01, &mut buffer)?;
 
-        self.dev.read_register_buffer(0x00, &mut buffer)?;
+        // Indices adjusted based on reading from 0x01
+        let gesture = Gesture::try_from(buffer[0]).expect("Unknown gesture"); // Gesture @ 0x01
+        let points = buffer[1] & 0x0F; // FingerNum @ 0x02
 
-        let gesture = Gesture::try_from(buffer[1]).expect("Unknown gesture");
-        let points = buffer[2] & 0x0F;
-
-        let x_high = buffer[3] & 0x0f;
-        let x_low = buffer[4];
-
-        let y_high = buffer[5] & 0x0f;
-        let y_low = buffer[6];
-
+        let x_high = buffer[2] & 0x0f; // TouchX H @ 0x03[3:0]
+        let x_low = buffer[3]; // TouchX L @ 0x04
         let x: u16 = (u16::from(x_high) << 8) | u16::from(x_low);
+
+        let y_high = buffer[4] & 0x0f; // TouchY H @ 0x05[3:0]
+        let y_low = buffer[5]; // TouchY L @ 0x06
         let y: u16 = (u16::from(y_high) << 8) | u16::from(y_low);
 
-        let event = Event::try_from(buffer[3] >> 6).expect("Unknown event");
+        // Event is stored in the upper bits of the X coordinate's high byte register (0x03)
+        let event = Event::try_from(buffer[2] >> 6).expect("Unknown event"); // EventFlag @ 0x03[7:6]
 
         let data = TouchData {
             gesture,

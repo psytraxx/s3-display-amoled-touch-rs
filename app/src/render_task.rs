@@ -1,4 +1,5 @@
 use alloc::rc::Rc;
+use drivers::cst816x::Event;
 use embassy_time::Timer;
 use esp_println::println;
 use slint::{
@@ -53,41 +54,68 @@ async fn process_touch(
         .is_touch_available()
         .expect("Touch availability check failed")
     {
-        *last_touch = None;
         return;
     }
     // Read the touch data
     match touch.read_touch() {
         Ok(point) => {
+            // Ignore events with 0 points unless it's an 'Up' event
+            if point.points == 0 && point.event != Event::Up {
+                // Potentially spurious event, ignore or log if needed
+                println!("Ignoring touch event with 0 points: {:?}", point);
+                return;
+            }
             let button = PointerEventButton::Left;
+            // Use the coordinates from the touch data
             let position = LogicalPosition::new(
                 DISPLAY_WIDTH as f32 - point.x as f32,
                 DISPLAY_HEIGHT as f32 - point.y as f32,
             );
-            // Determine event based on whether we had a previous touch
-            let event = if last_touch.is_some() {
-                WindowEvent::PointerMoved { position }
-            } else {
-                WindowEvent::PointerPressed { position, button }
+
+            let event = match point.event {
+                Event::Down => {
+                    // Only send Pressed if not already down
+                    if last_touch.is_none() {
+                        last_touch.replace(position);
+                        Some(WindowEvent::PointerPressed { position, button })
+                    } else {
+                        // Already pressed, treat as move? Or ignore? Let's treat as move.
+                        last_touch.replace(position);
+                        Some(WindowEvent::PointerMoved { position })
+                    }
+                }
+                Event::Contact => {
+                    // Send Moved only if currently pressed
+                    if last_touch.is_some() {
+                        last_touch.replace(position);
+                        Some(WindowEvent::PointerMoved { position })
+                    } else {
+                        None
+                    }
+                }
+                Event::Up => {
+                    // Send Released only if currently pressed
+                    if last_touch.take().is_some() {
+                        // Use the last known down position for release? Or current point's position?
+                        // Slint usually expects the position where the release occurred.
+                        Some(WindowEvent::PointerReleased { position, button })
+                    } else {
+                        // Up event without prior Down? Ignore.
+                        Some(WindowEvent::PointerExited)
+                    }
+                }
             };
-            // Update last_touch and dispatch events
-            last_touch.replace(position);
-            window
-                .try_dispatch_event(event)
-                .expect("Event dispatch failed");
+
+            // Dispatch the determined event, if any
+            if let Some(evt) = event {
+                println!("Dispatching Slint event: {:?}", evt);
+                window
+                    .try_dispatch_event(evt)
+                    .expect("Event dispatch failed");
+            }
         }
         Err(e) => {
             println!("Touch read error: {:?}", e);
         }
-    }
-
-    if let Some(position) = last_touch.take() {
-        let button = PointerEventButton::Left;
-        window
-            .try_dispatch_event(WindowEvent::PointerReleased { position, button })
-            .expect("Event dispatch failed");
-        window
-            .try_dispatch_event(WindowEvent::PointerExited)
-            .expect("Event dispatch failed");
     }
 }
