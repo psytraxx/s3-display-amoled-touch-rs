@@ -18,7 +18,7 @@ use esp_alloc::psram_allocator;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_hal::dma::{DmaChannel0, DmaTxBuf};
-use esp_hal::gpio::{GpioPin, Input, InputConfig, Level, Output, OutputConfig, Pull};
+use esp_hal::gpio::{AnyPin, Input, InputConfig, Level, Output, OutputConfig, Pin, Pull};
 use esp_hal::i2c::master::I2c;
 use esp_hal::peripherals::{I2C0, SPI2, UART0};
 use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
@@ -99,7 +99,11 @@ async fn main(spawner: Spawner) {
     println!("PMICEN set high");
 
     // Initialize the I2C bus used by several peripherals
-    let i2c_bus = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
+    let i2c_bus = initialize_i2c(
+        peripherals.I2C0,
+        peripherals.GPIO3.degrade(),
+        peripherals.GPIO2.degrade(),
+    );
 
     // Detect the connected SPI board model via I2C communication
     detect_spi_model(i2c_bus);
@@ -114,15 +118,15 @@ async fn main(spawner: Spawner) {
     slint::platform::set_platform(backend).expect("set_platform failed");
 
     // Initialize the touchpad interface for user interactions
-    let touchpad = initialize_touchpad(i2c_bus, peripherals.GPIO21).await;
+    let touchpad = initialize_touchpad(i2c_bus, peripherals.GPIO21.degrade()).await;
 
     // Initialize the display via SPI with DMA support
     let display = initialize_display(
-        peripherals.GPIO17,
-        peripherals.GPIO7,
-        peripherals.GPIO47,
-        peripherals.GPIO18,
-        peripherals.GPIO6,
+        peripherals.GPIO17.degrade(),
+        peripherals.GPIO7.degrade(),
+        peripherals.GPIO47.degrade(),
+        peripherals.GPIO18.degrade(),
+        peripherals.GPIO6.degrade(),
         peripherals.SPI2,
         peripherals.DMA_CH0,
     );
@@ -131,7 +135,11 @@ async fn main(spawner: Spawner) {
     spawner.spawn(render_task(window, display, touchpad)).ok();
 
     // Initialize the radar (LD2410) sensor interface via UART
-    let radar = initialize_radar(peripherals.UART0, peripherals.GPIO44, peripherals.GPIO43);
+    let radar = initialize_radar(
+        peripherals.UART0,
+        peripherals.GPIO44.degrade(),
+        peripherals.GPIO43.degrade(),
+    );
 
     // Launch the radar task asynchronously
     spawner.spawn(radar_task(radar)).ok();
@@ -152,8 +160,8 @@ async fn main(spawner: Spawner) {
 /// Returns a shared, thread-safe reference (AtomicCell) for the I2C instance.
 fn initialize_i2c(
     i2c: I2C0,
-    sda: GpioPin<3>,
-    scl: GpioPin<2>,
+    sda: AnyPin,
+    scl: AnyPin,
 ) -> &'static AtomicCell<I2c<'static, Blocking>> {
     // Create a new I2C master instance with default configuration
     let i2c = I2c::new(i2c, esp_hal::i2c::master::Config::default())
@@ -170,7 +178,7 @@ fn initialize_i2c(
 /// Returns an instance of the touchpad driver.
 async fn initialize_touchpad(
     i2c: &'static AtomicCell<I2c<'static, Blocking>>,
-    touch: GpioPin<21>,
+    touch: AnyPin,
 ) -> Touchpad {
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
@@ -206,7 +214,7 @@ async fn initialize_touchpad(
 
 /// Creates and initializes the radar sensor (LD2410) interface using UART.
 /// Returns the configured radar sensor instance.
-fn initialize_radar(uart1: UART0, rx_pin: GpioPin<44>, tx_pin: GpioPin<43>) -> RadarSensor {
+fn initialize_radar(uart1: UART0, rx_pin: AnyPin, tx_pin: AnyPin) -> RadarSensor {
     // Set UART configuration including baud rate, parity, and stop bits
     let config = UartConfig::default()
         .with_baudrate(256000)
@@ -226,11 +234,11 @@ fn initialize_radar(uart1: UART0, rx_pin: GpioPin<44>, tx_pin: GpioPin<43>) -> R
 /// Initializes the SPI-connected display and configures its DMA buffers.
 /// Returns an instance of the RM67162 display driver.
 fn initialize_display(
-    reset: GpioPin<17>,
-    dc: GpioPin<7>,
-    sck: GpioPin<47>,
-    mosi: GpioPin<18>,
-    cs: GpioPin<6>,
+    reset: AnyPin,
+    dc: AnyPin,
+    sck: AnyPin,
+    mosi: AnyPin,
+    cs: AnyPin,
     spi: SPI2,
     dma: DmaChannel0,
 ) -> TouchDisplay {
