@@ -21,8 +21,8 @@ use esp_hal::dma::DmaTxBuf;
 use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::I2c;
 use esp_hal::peripherals::{
-    DMA_CH0, GPIO17, GPIO18, GPIO2, GPIO21, GPIO3, GPIO4, GPIO43, GPIO44, GPIO6, GPIO7, I2C0, SPI2,
-    UART0,
+    DMA_CH0, GPIO17, GPIO18, GPIO2, GPIO21, GPIO3, GPIO43, GPIO44, GPIO47, GPIO6, GPIO7, I2C0,
+    SPI2, UART0,
 };
 use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
@@ -123,7 +123,7 @@ async fn main(spawner: Spawner) {
     let display = initialize_display(
         peripherals.GPIO17,
         peripherals.GPIO7,
-        peripherals.GPIO4,
+        peripherals.GPIO47,
         peripherals.GPIO18,
         peripherals.GPIO6,
         peripherals.SPI2,
@@ -235,7 +235,7 @@ fn initialize_radar(
 fn initialize_display(
     reset: GPIO17<'static>,
     dc: GPIO7<'static>,
-    sck: GPIO4<'static>,
+    sck: GPIO47<'static>,
     mosi: GPIO18<'static>,
     cs: GPIO6<'static>,
     spi: SPI2<'static>,
