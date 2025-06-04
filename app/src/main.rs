@@ -17,10 +17,13 @@ use embedded_hal_bus::util::AtomicCell;
 use esp_alloc::psram_allocator;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
-use esp_hal::dma::{DmaChannel0, DmaTxBuf};
-use esp_hal::gpio::{AnyPin, Input, InputConfig, Level, Output, OutputConfig, Pin, Pull};
+use esp_hal::dma::DmaTxBuf;
+use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::I2c;
-use esp_hal::peripherals::{I2C0, SPI2, UART0};
+use esp_hal::peripherals::{
+    DMA_CH0, GPIO17, GPIO18, GPIO2, GPIO21, GPIO3, GPIO43, GPIO44, GPIO47, GPIO6, GPIO7, I2C0,
+    SPI2, UART0,
+};
 use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
 use esp_hal::time::Rate;
@@ -99,11 +102,7 @@ async fn main(spawner: Spawner) {
     println!("PMICEN set high");
 
     // Initialize the I2C bus used by several peripherals
-    let i2c_bus = initialize_i2c(
-        peripherals.I2C0,
-        peripherals.GPIO3.degrade(),
-        peripherals.GPIO2.degrade(),
-    );
+    let i2c_bus = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
 
     // Detect the connected SPI board model via I2C communication
     detect_spi_model(i2c_bus);
@@ -118,15 +117,15 @@ async fn main(spawner: Spawner) {
     slint::platform::set_platform(backend).expect("set_platform failed");
 
     // Initialize the touchpad interface for user interactions
-    let touchpad = initialize_touchpad(i2c_bus, peripherals.GPIO21.degrade()).await;
+    let touchpad = initialize_touchpad(i2c_bus, peripherals.GPIO21).await;
 
     // Initialize the display via SPI with DMA support
     let display = initialize_display(
-        peripherals.GPIO17.degrade(),
-        peripherals.GPIO7.degrade(),
-        peripherals.GPIO47.degrade(),
-        peripherals.GPIO18.degrade(),
-        peripherals.GPIO6.degrade(),
+        peripherals.GPIO17,
+        peripherals.GPIO7,
+        peripherals.GPIO47,
+        peripherals.GPIO18,
+        peripherals.GPIO6,
         peripherals.SPI2,
         peripherals.DMA_CH0,
     );
@@ -135,11 +134,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(render_task(window, display, touchpad)).ok();
 
     // Initialize the radar (LD2410) sensor interface via UART
-    let radar = initialize_radar(
-        peripherals.UART0,
-        peripherals.GPIO44.degrade(),
-        peripherals.GPIO43.degrade(),
-    );
+    let radar = initialize_radar(peripherals.UART0, peripherals.GPIO44, peripherals.GPIO43);
 
     // Launch the radar task asynchronously
     spawner.spawn(radar_task(radar)).ok();
@@ -159,9 +154,9 @@ async fn main(spawner: Spawner) {
 /// Initialize the I2C bus used to communicate with external devices.
 /// Returns a shared, thread-safe reference (AtomicCell) for the I2C instance.
 fn initialize_i2c(
-    i2c: I2C0,
-    sda: AnyPin,
-    scl: AnyPin,
+    i2c: I2C0<'static>,
+    sda: GPIO3<'static>,
+    scl: GPIO2<'static>,
 ) -> &'static AtomicCell<I2c<'static, Blocking>> {
     // Create a new I2C master instance with default configuration
     let i2c = I2c::new(i2c, esp_hal::i2c::master::Config::default())
@@ -178,7 +173,7 @@ fn initialize_i2c(
 /// Returns an instance of the touchpad driver.
 async fn initialize_touchpad(
     i2c: &'static AtomicCell<I2c<'static, Blocking>>,
-    touch: AnyPin,
+    touch: GPIO21<'static>,
 ) -> Touchpad {
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
@@ -214,7 +209,11 @@ async fn initialize_touchpad(
 
 /// Creates and initializes the radar sensor (LD2410) interface using UART.
 /// Returns the configured radar sensor instance.
-fn initialize_radar(uart1: UART0, rx_pin: AnyPin, tx_pin: AnyPin) -> RadarSensor {
+fn initialize_radar(
+    uart1: UART0<'static>,
+    rx_pin: GPIO44<'static>,
+    tx_pin: GPIO43<'static>,
+) -> RadarSensor {
     // Set UART configuration including baud rate, parity, and stop bits
     let config = UartConfig::default()
         .with_baudrate(256000)
@@ -234,13 +233,13 @@ fn initialize_radar(uart1: UART0, rx_pin: AnyPin, tx_pin: AnyPin) -> RadarSensor
 /// Initializes the SPI-connected display and configures its DMA buffers.
 /// Returns an instance of the RM67162 display driver.
 fn initialize_display(
-    reset: AnyPin,
-    dc: AnyPin,
-    sck: AnyPin,
-    mosi: AnyPin,
-    cs: AnyPin,
-    spi: SPI2,
-    dma: DmaChannel0,
+    reset: GPIO17<'static>,
+    dc: GPIO7<'static>,
+    sck: GPIO47<'static>,
+    mosi: GPIO18<'static>,
+    cs: GPIO6<'static>,
+    spi: SPI2<'static>,
+    dma: DMA_CH0<'static>,
 ) -> TouchDisplay {
     // Configure GPIO pins for display control signals (DC, CS, reset, clock, and MOSI)
     let dc = Output::new(dc, Level::Low, OutputConfig::default());
@@ -261,7 +260,7 @@ fn initialize_display(
     .with_mosi(mosi)
     .with_dma(dma);
 
-    // Configure the DMA buffers for SPI communication
+    #[allow(clippy::manual_div_ceil)]
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
     let dma_rx_buf = esp_hal::dma::DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
