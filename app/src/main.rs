@@ -260,7 +260,7 @@ fn initialize_display(
     .with_mosi(mosi)
     .with_dma(dma);
 
-    // Configure the DMA buffers for SPI communication
+    #[allow(clippy::manual_div_ceil)]
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
     let dma_rx_buf = esp_hal::dma::DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
