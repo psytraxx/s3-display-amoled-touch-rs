@@ -30,6 +30,7 @@ use esp_hal::time::Rate;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
 use esp_hal::{dma_buffers, uart, Blocking};
 use esp_hal_embassy::main;
+use esp_println::logger::init_logger;
 use esp_println::println;
 use mipidsi::interface::SpiInterface;
 use mipidsi::models::RM67162;
@@ -82,6 +83,7 @@ pub type Touchpad = CST816x<AtomicDevice<'static, I2c<'static, Blocking>>, Input
 /// Main entry point for the application
 #[main]
 async fn main(spawner: Spawner) {
+    init_logger(log::LevelFilter::Info);
     // Initialize peripherals and configure the CPU clock
     let peripherals = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::_240MHz));
 
