@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+esp-bootloader-esp-idf = "0.1.0"
 esp-backtrace = { version = "0.16.0", features = [
     "esp32s3",
     "exception-handler",
@@ -36,5 +37,5 @@ embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-sync = { version = "0.7.0", features = [] }
 slint-generated = { path = "../slint-generated" }
-static_cell = "2.1.1"
+static_cell = { version = "2.1.0", features = ["nightly"] }
 log = "0.4.27"

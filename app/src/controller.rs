@@ -1,5 +1,5 @@
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use esp_println::println;
+use log::{error, info};
 use slint_generated::AppWindow;
 
 use crate::Charger;
@@ -29,13 +29,13 @@ impl<'a> Controller<'a> {
 
         loop {
             let action = ACTION.receive().await;
-            println!("process action {:?}", &action);
+            info!("process action {:?}", &action);
             match self.process_action(action).await {
                 Ok(()) => {
                     // all good
                 }
                 Err(e) => {
-                    println!("process action: {:?}", e);
+                    error!("process action: {:?}", e);
                 }
             }
         }
@@ -58,7 +58,7 @@ impl<'a> Controller<'a> {
                         .expect("set_charge_disabled failed");
                 }
 
-                println!("set_charge_enabled: {:?}", state);
+                info!("set_charge_enabled: {:?}", state);
 
                 let text = self.pmu.get_info().expect("failed to get info");
                 self.app_window.set_text(text.into());
@@ -84,7 +84,7 @@ pub fn send_action(a: Action) {
         }
         Err(a) => {
             // this could happen because the controller is slow to respond or we are making too many requests
-            println!("user action queue full, could not add: {:?}", a)
+            error!("user action queue full, could not add: {:?}", a)
         }
     }
 }
