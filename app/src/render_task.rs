@@ -62,7 +62,7 @@ async fn process_touch(
             // Ignore events with 0 points unless it's an 'Up' event
             if point.points == 0 && point.event != Event::Up {
                 // Potentially spurious event, ignore or log if needed
-                info!("Ignoring touch event with 0 points: {:?}", point);
+                info!("Ignoring touch event with 0 points: {point:?}");
                 return;
             }
             let button = PointerEventButton::Left;
@@ -108,14 +108,14 @@ async fn process_touch(
 
             // Dispatch the determined event, if any
             if let Some(evt) = event {
-                info!("Dispatching Slint event: {:?}", evt);
+                info!("Dispatching Slint event: {evt:?}");
                 window
                     .try_dispatch_event(evt)
                     .expect("Event dispatch failed");
             }
         }
         Err(e) => {
-            error!("Touch read error: {:?}", e);
+            error!("Touch read error: {e:?}");
         }
     }
 }

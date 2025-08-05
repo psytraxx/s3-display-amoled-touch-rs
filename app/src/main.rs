@@ -203,18 +203,18 @@ async fn initialize_touchpad(
         .expect("Failed to get IRQ control");
     info!("IRQ control: 0x{:X}", irq_config.bits());
     let chip_id = touchpad.get_chip_id().expect("Failed to get chip ID");
-    info!("Touchpad chip ID: {}", chip_id);
+    info!("Touchpad chip ID: {chip_id}");
     let motion_mask = touchpad
         .get_motion_mask()
         .expect("Failed to get motion mask");
-    info!("Motion mask: 0x{:X}", motion_mask);
+    info!("Motion mask: 0x{motion_mask:X}");
     touchpad
         .set_irq_pulse_width(10)
         .expect("Failed to set pulse width");
     let pulse_config = touchpad
         .get_irq_pulse_width()
         .expect("Failed to get pulse config");
-    info!("Pulse width: {:?}", pulse_config);
+    info!("Pulse width: {pulse_config:?}");
 
     touchpad
 }

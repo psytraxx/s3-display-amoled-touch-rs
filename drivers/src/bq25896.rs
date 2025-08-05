@@ -1300,7 +1300,7 @@ where
 
         let mut text = format!("CHG state: {}\n", self.get_charge_status()?);
 
-        text.push_str(&format!("USB PlugIn: {}\n", is_vbus_present));
+        text.push_str(&format!("USB PlugIn: {is_vbus_present}\n"));
         text.push_str(&format!("Bus state: {}\n", self.get_bus_status()?));
         text.push_str(&format!(
             "Battery voltage: {}mV\n",

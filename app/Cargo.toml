@@ -13,7 +13,7 @@ esp-backtrace = { version = "0.16.0", features = [
 ] }
 mipidsi = { git = "https://github.com/almindor/mipidsi.git", branch = "master" }
 drivers = { path = "../drivers", features = [] }
-esp-hal = { version = "1.0.0-beta.1", features = [
+esp-hal = { version = "1.0.0-rc.0", features = [
     "esp32s3",
     "psram",
     "unstable",
@@ -37,5 +37,5 @@ embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-sync = { version = "0.7.0", features = [] }
 slint-generated = { path = "../slint-generated" }
-static_cell = { version = "2.1.0", features = ["nightly"] }
+static_cell = { version = "2.1.1", features = ["nightly"] }
 log = "0.4.27"
