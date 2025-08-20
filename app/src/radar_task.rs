@@ -16,7 +16,7 @@ pub async fn radar_task(mut radar: RadarSensor) {
         .expect("Failed to request radar restart");
 
     if let Some(v) = version {
-        info!("Firmware version: {}", v);
+        info!("Firmware version: {v}");
     }
 
     let config = radar
@@ -24,11 +24,11 @@ pub async fn radar_task(mut radar: RadarSensor) {
         .expect("Failed to request current configuration");
 
     if let Some(c) = config {
-        info!("Current configuration: {}", c);
+        info!("Current configuration: {c}");
     }
     loop {
         if let Ok(Some(event)) = radar.get_radar_data() {
-            info!("Radar data: {:?}", event);
+            info!("Radar data: {event:?}");
         }
         Timer::after_millis(100).await
     }

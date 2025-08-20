@@ -35,7 +35,7 @@ impl<'a> Controller<'a> {
                     // all good
                 }
                 Err(e) => {
-                    error!("process action: {:?}", e);
+                    error!("process action: {e:?}");
                 }
             }
         }
@@ -58,7 +58,7 @@ impl<'a> Controller<'a> {
                         .expect("set_charge_disabled failed");
                 }
 
-                info!("set_charge_enabled: {:?}", state);
+                info!("set_charge_enabled: {state:?}");
 
                 let text = self.pmu.get_info().expect("failed to get info");
                 self.app_window.set_text(text.into());
@@ -84,7 +84,7 @@ pub fn send_action(a: Action) {
         }
         Err(a) => {
             // this could happen because the controller is slow to respond or we are making too many requests
-            error!("user action queue full, could not add: {:?}", a)
+            error!("user action queue full, could not add: {a:?}")
         }
     }
 }
