@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-esp-bootloader-esp-idf = "0.1.0"
+esp-bootloader-esp-idf = { version = "0.2.0", features = ["esp32s3", "log-04"] }
 esp-backtrace = { version = "0.17.0", features = [
     "esp32s3",
     "exception-handler",
