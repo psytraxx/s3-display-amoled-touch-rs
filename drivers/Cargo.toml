@@ -12,5 +12,5 @@ embedded-io = { version = "0.6.1", features = ["alloc"] }
 libm = "0.2.15"
 defmt = { version = "1.0.1", optional = true }
 embedded-hal = { version = "1.0.0" }
-bitflags = "2.9.1"
+bitflags = "2.9.4"
 num_enum = { version = "0.7.4", default-features = false }
