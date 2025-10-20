@@ -6,11 +6,13 @@ edition = "2021"
 [features]
 default = []
 defmt = ["dep:defmt", "embedded-io/defmt", "embedded-hal/defmt-03"]
+log-04 = ["dep:log"]
 
 [dependencies]
 embedded-io = { version = "0.7.1", features = ["alloc"] }
 libm = "0.2.15"
 defmt = { version = "1.0.1", optional = true }
+log = { version = "0.4.28", optional = true }
 embedded-hal = { version = "1.0.0" }
 bitflags = "2.10.0"
 num_enum = { version = "0.7.5", default-features = false }
