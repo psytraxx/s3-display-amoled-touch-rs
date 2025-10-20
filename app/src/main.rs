@@ -39,7 +39,6 @@ use esp_hal::spi::Mode;
 use esp_hal::time::Rate;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
 use esp_hal::{dma_buffers, uart, Blocking};
-use esp_hal_embassy::main;
 use log::{error, info};
 use mipidsi::interface::SpiInterface;
 use mipidsi::models::RM67162;
@@ -90,7 +89,7 @@ pub type RadarSensor = LD2410<Uart<'static, Blocking>, Delay>;
 pub type Touchpad = CST816x<AtomicDevice<'static, I2c<'static, Blocking>>, Input<'static>>;
 
 /// Main entry point for the application
-#[main]
+#[esp_rtos::main]
 async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
 
@@ -98,11 +97,11 @@ async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::_240MHz));
 
     // Reserve memory for dynamic allocations
-    esp_alloc::heap_allocator!(size: 72 * 1024);
+    esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 73744);
 
     // Set up the timer group for the embassy executor
     let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
-    esp_hal_embassy::init(timg0.timer0);
+    esp_rtos::start(timg0.timer0);
     info!("Embassy initialized!");
 
     // Initialize the PSRAM allocator for extra memory requirements
