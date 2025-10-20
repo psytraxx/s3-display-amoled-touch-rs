@@ -2,7 +2,7 @@ use core::fmt::Display;
 
 use alloc::vec::Vec;
 #[cfg(feature = "defmt")]
-use defmt::{debug, info, warn, Format};
+use defmt::Format;
 use embedded_hal::delay::DelayNs;
 use embedded_io::{Read, Write};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -330,8 +330,10 @@ where
             let res = this.execute_command(Command::RequestRestart)?;
             if res.is_some() {
                 #[cfg(feature = "defmt")]
-                info!("Restart request successful");
+                defmt::info!("Restart request successful");
                 this.delay.delay_ms(50);
+                #[cfg(feature = "log-04")]
+                log::info!("Restart request successful");
             }
             Ok(res)
         })
@@ -343,11 +345,15 @@ where
             let res = this.execute_command(Command::RequestFactoryReset)?;
             if res.is_some() {
                 #[cfg(feature = "defmt")]
-                info!("Factory reset request successful");
+                defmt::info!("Factory reset request successful");
                 this.delay.delay_ms(50);
+                #[cfg(feature = "log-04")]
+                log::info!("Factory reset request successful");
             } else {
                 #[cfg(feature = "defmt")]
-                warn!("Factory reset request failed");
+                defmt::warn!("Factory reset request failed");
+                #[cfg(feature = "log-04")]
+                log::warn!("Factory reset request failed");
             }
             Ok(res)
         })
@@ -399,9 +405,17 @@ where
         #[cfg(feature = "defmt")]
         {
             if res.is_some() {
-                info!("Start Engineering Mode successful");
+                defmt::info!("Start Engineering Mode successful");
             } else {
-                warn!("Start Engineering Mode failed");
+                defmt::warn!("Start Engineering Mode failed");
+            }
+        }
+        #[cfg(feature = "log-04")]
+        {
+            if res.is_some() {
+                log::info!("Start Engineering Mode successful");
+            } else {
+                log::warn!("Start Engineering Mode failed");
             }
         }
         Ok(res.is_some())
@@ -414,9 +428,17 @@ where
         #[cfg(feature = "defmt")]
         {
             if res.is_some() {
-                info!("End Engineering Mode successful");
+                defmt::info!("End Engineering Mode successful");
             } else {
-                warn!("End Engineering Mode failed");
+                defmt::warn!("End Engineering Mode failed");
+            }
+        }
+        #[cfg(feature = "log-04")]
+        {
+            if res.is_some() {
+                log::info!("End Engineering Mode successful");
+            } else {
+                log::warn!("End Engineering Mode failed");
             }
         }
         Ok(res.is_some())
@@ -507,10 +529,14 @@ where
         let entered = self.execute_command(Command::EnterConfigMode)?.is_some();
         if entered {
             #[cfg(feature = "defmt")]
-            debug!("Entered configuration mode");
+            defmt::debug!("Entered configuration mode");
+            #[cfg(feature = "log-04")]
+            log::debug!("Entered configuration mode");
         } else {
             #[cfg(feature = "defmt")]
-            warn!("Failed to enter configuration mode");
+            defmt::warn!("Failed to enter configuration mode");
+            #[cfg(feature = "log-04")]
+            log::warn!("Failed to enter configuration mode");
         }
         Ok(entered)
     }
@@ -519,10 +545,14 @@ where
         let left = self.execute_command(Command::ExitConfigMode)?.is_some();
         if left {
             #[cfg(feature = "defmt")]
-            debug!("Left configuration mode");
+            defmt::debug!("Left configuration mode");
+            #[cfg(feature = "log-04")]
+            log::debug!("Left configuration mode");
         } else {
             #[cfg(feature = "defmt")]
-            warn!("Failed to leave configuration mode");
+            defmt::warn!("Failed to leave configuration mode");
+            #[cfg(feature = "log-04")]
+            log::warn!("Failed to leave configuration mode");
         }
         Ok(left)
     }
@@ -539,7 +569,9 @@ where
             Ok(res)
         } else {
             #[cfg(feature = "defmt")]
-            warn!("Failed to enter configuration mode");
+            defmt::warn!("Failed to enter configuration mode");
+            #[cfg(feature = "log-04")]
+            log::warn!("Failed to enter configuration mode");
             Ok(None)
         }
     }
