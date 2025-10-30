@@ -139,7 +139,7 @@ where
     /// * `milliampere` - Current limit in mA
     pub fn set_input_current_limit(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate input is multiple of step size
-        if milliampere % IN_CURRENT_STEP != 0 {
+        if !milliampere.is_multiple_of(IN_CURRENT_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid50);
         }
 
@@ -218,7 +218,7 @@ where
         mut millivolt: u16,
     ) -> Result<(), PmuSensorError> {
         // Validate step size
-        if millivolt % IN_CURRENT_OFFSET_STEP != 0 {
+        if !millivolt.is_multiple_of(IN_CURRENT_OFFSET_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid100);
         }
 
@@ -402,7 +402,7 @@ where
     /// # Arguments
     /// * `millivolt` - Power down voltage in mV
     pub fn set_sys_power_down_voltage(&mut self, millivolt: u16) -> Result<(), PmuSensorError> {
-        if millivolt % SYS_VOL_STEPS != 0 {
+        if !millivolt.is_multiple_of(SYS_VOL_STEPS) {
             return Err(PmuSensorError::VoltageStepInvalid100);
         }
         if !(SYS_VOFF_VOL_MIN..=SYS_VOFF_VOL_MAX).contains(&millivolt) {
@@ -463,7 +463,7 @@ where
         milliampere: u16,
     ) -> Result<(), PmuSensorError> {
         // Check if current is multiple of step size
-        if milliampere % FAST_CHG_CUR_STEP != 0 {
+        if !milliampere.is_multiple_of(FAST_CHG_CUR_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid64);
         }
 
@@ -501,7 +501,7 @@ where
     /// * `milliampere` - Precharge current in mA
     pub fn set_precharge_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate step size
-        if milliampere % PRE_CHG_CUR_STEP != 0 {
+        if !milliampere.is_multiple_of(PRE_CHG_CUR_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid64);
         }
 
@@ -537,7 +537,7 @@ where
     /// * `milliampere` - Termination current in mA
     pub fn set_termination_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
         // Validate step size
-        if milliampere % TERM_CHG_CUR_STEP != 0 {
+        if !milliampere.is_multiple_of(TERM_CHG_CUR_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid64);
         }
 
@@ -575,7 +575,7 @@ where
     /// * `target_voltage` - Charge target voltage in mV
     pub fn set_charge_target_voltage(&mut self, target_voltage: u16) -> Result<(), PmuSensorError> {
         // Check if voltage is multiple of step size
-        if target_voltage % CHG_VOL_STEP != 0 {
+        if !target_voltage.is_multiple_of(CHG_VOL_STEP) {
             return Err(PmuSensorError::VoltageStepInvalid16);
         }
 
@@ -764,7 +764,7 @@ where
     /// # Arguments
     /// * `milliohm` - IR compensation resistor in mOhm
     pub fn set_ir_compensation_resistor(&mut self, milliohm: u16) -> Result<(), PmuSensorError> {
-        if milliohm % BAT_COMP_STEPS != 0 {
+        if !milliohm.is_multiple_of(BAT_COMP_STEPS) {
             return Err(PmuSensorError::ResistanceStepInvalid20);
         }
 
@@ -784,7 +784,7 @@ where
         &mut self,
         millivolt: u16,
     ) -> Result<(), PmuSensorError> {
-        if millivolt % VCLAMP_STEPS != 0 {
+        if !millivolt.is_multiple_of(VCLAMP_STEPS) {
             return Err(PmuSensorError::VoltageStepInvalid32);
         }
 
@@ -929,7 +929,7 @@ where
     /// # Arguments
     /// * `millivolt` - Boost mode voltage regulation in mV
     pub fn set_boost_voltage(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
-        if millivolt % BOOST_VOL_STEP != 0 {
+        if !millivolt.is_multiple_of(BOOST_VOL_STEP) {
             return Err(PmuSensorError::VoltageStepInvalid64);
         }
 
@@ -1097,7 +1097,7 @@ where
     /// # Arguments
     /// * `millivolt` - Voltage in mV (2600-15300mV in 100mV steps)
     pub fn set_vindpm_threshold(&mut self, mut millivolt: u16) -> Result<(), PmuSensorError> {
-        if millivolt % VINDPM_VOL_STEPS != 0 {
+        if !millivolt.is_multiple_of(VINDPM_VOL_STEPS) {
             return Err(PmuSensorError::VoltageStepInvalid100);
         }
 
@@ -1250,7 +1250,7 @@ where
         &mut self,
         mut milliampere: u16,
     ) -> Result<(), PmuSensorError> {
-        if milliampere % IN_CURRENT_OPT_STEP != 0 {
+        if !milliampere.is_multiple_of(IN_CURRENT_OPT_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid50);
         }
 
