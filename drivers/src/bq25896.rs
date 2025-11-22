@@ -1370,7 +1370,10 @@ where
             "Battery: {}mV ({}%)\n",
             battery_voltage, battery_percentage
         ));
-        text.push_str(&format!("Charge current: {}mA\n", self.get_charge_current()?));
+        text.push_str(&format!(
+            "Charge current: {}mA\n",
+            self.get_charge_current()?
+        ));
         text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));
         text.push_str(&format!(
             "Charger fast charge curr.: {}mA\n",
