@@ -155,7 +155,11 @@ async fn main(spawner: Spawner) {
     app_window.show().expect("UI show failed");
 
     // Initialize the PMU for battery charging control
-    let pmu = initialize_pmu(i2c_bus).await;
+    let mut pmu = initialize_pmu(i2c_bus).await;
+    // Populate initial PMU info into the UI text area (scrollable Flickable in Slint)
+    if let Ok(info) = pmu.get_info() {
+        app_window.set_text(info.into());
+    }
 
     // Start the main event loop in the controller with the UI and PMU
     let mut controller = Controller::new(&app_window, pmu);

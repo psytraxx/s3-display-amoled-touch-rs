@@ -1370,9 +1370,7 @@ where
             "Battery: {}mV ({}%)\n",
             battery_voltage, battery_percentage
         ));
-
-        text.push_str(&format!("USB voltage: {}mV\n", self.get_vbus_voltage()?));
-        text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage()?));
+        text.push_str(&format!("Charge current: {}mA\n", self.get_charge_current()?));
         text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));
         text.push_str(&format!(
             "Charger fast charge curr.: {}mA\n",
@@ -1386,6 +1384,8 @@ where
             "Input curr. limit: {}mA\n",
             self.get_input_current_limit()?
         ));
+        text.push_str(&format!("USB voltage: {}mV\n", self.get_vbus_voltage()?));
+        text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage()?));
 
         Ok(text)
     }
