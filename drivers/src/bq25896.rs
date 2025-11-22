@@ -153,7 +153,7 @@ where
         reg_val &= 0xC0;
 
         // Calculate new value (offset from minimum, divided by step size)
-        let current_bits = ((ma - IN_CURRENT_MIN) / IN_CURRENT_MAX) as u8;
+        let current_bits = ((ma - IN_CURRENT_MIN) / IN_CURRENT_STEP) as u8;
 
         // Combine preserved bits with new value
         reg_val |= current_bits;
@@ -304,6 +304,12 @@ where
     pub fn is_input_detection_enabled(&mut self) -> Result<bool, PmuSensorError> {
         let result = self.dev.get_register_bit(0x02, 1)?;
         Ok(result)
+    }
+
+    /// Forces D+/D- detection when AUTO_DPDM_EN is disabled
+    pub fn force_dpdm_detection(&mut self) -> Result<(), PmuSensorError> {
+        self.dev.set_register_bit(0x02, 1)?;
+        Ok(())
     }
 
     /// Enables automatic input detection
@@ -1109,6 +1115,13 @@ where
         Ok(())
     }
 
+    /// Gets the absolute VINDPM threshold voltage
+    pub fn get_vindpm_threshold(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x0D)?;
+        let steps = val & 0x7F;
+        Ok((steps as u16 * VINDPM_VOL_STEPS) + VINDPM_VOL_BASE)
+    }
+
     // REGISTER 0x0E
     // ADC conversion of Battery Voltage (VBAT)
 
@@ -1133,6 +1146,33 @@ where
         let vbat = (data as u16) * 20 + 2304;
 
         Ok(vbat)
+    }
+
+    /// Estimates battery percentage based on voltage
+    /// Uses a simplified Li-ion voltage curve
+    /// Returns percentage (0-100)
+    pub fn get_battery_percentage(&mut self) -> Result<u8, PmuSensorError> {
+        let voltage = self.get_battery_voltage()?;
+
+        // Li-ion voltage discharge curve (approximate)
+        // 4.2V = 100%, 4.0V = ~90%, 3.8V = ~60%, 3.6V = ~30%, 3.4V = ~10%, 3.0V = 0%
+        let percentage = if voltage >= 4200 {
+            100
+        } else if voltage >= 4000 {
+            90 + ((voltage - 4000) * 10 / 200) // 4.0V-4.2V: 90-100%
+        } else if voltage >= 3800 {
+            60 + ((voltage - 3800) * 30 / 200) // 3.8V-4.0V: 60-90%
+        } else if voltage >= 3600 {
+            30 + ((voltage - 3600) * 30 / 200) // 3.6V-3.8V: 30-60%
+        } else if voltage >= 3400 {
+            10 + ((voltage - 3400) * 20 / 200) // 3.4V-3.6V: 10-30%
+        } else if voltage >= 3000 {
+            (voltage - 3000) * 10 / 400 // 3.0V-3.4V: 0-10%
+        } else {
+            0
+        };
+
+        Ok(percentage.min(100) as u8)
     }
 
     // REGISTER 0x0F
@@ -1185,6 +1225,12 @@ where
 
     // REGISTER 0x11
     // ADC conversion of VBUS voltage (VBUS) , VBUS Good Status
+
+    /// Checks if VBUS is good (within regulation)
+    pub fn is_vbus_good(&mut self) -> Result<bool, PmuSensorError> {
+        let data = self.dev.read_register(0x11)?;
+        Ok(((data >> 7) & 0x01) != 0)
+    }
 
     /// Gets the USB bus voltage in millivolts
     pub fn get_vbus_voltage(&mut self) -> Result<u16, PmuSensorError> {
@@ -1262,6 +1308,14 @@ where
         Ok(())
     }
 
+    /// Gets the Input Current Limit in effect while ICO is enabled
+    /// This is the detected current limit from the Input Current Optimizer
+    pub fn get_input_current_limit_in_effect(&mut self) -> Result<u16, PmuSensorError> {
+        let val = self.dev.read_register(0x13)?;
+        let steps = val & 0x3F;
+        Ok((steps as u16 * IN_CURRENT_OPT_STEP) + IN_CURRENT_OPT_MIN)
+    }
+
     // REGISTER 0x14
     // Register Reset, Input Current Optimizer (ICO) Status , Device Configuration, Temperature Profile, Device Revision: 10
 
@@ -1283,6 +1337,13 @@ where
         Ok((val >> 3) & 0x03)
     }
 
+    /// Gets the temperature profile setting
+    /// Returns true if JEITA profile is enabled
+    pub fn get_temperature_profile(&mut self) -> Result<bool, PmuSensorError> {
+        let val = self.dev.read_register(0x14)?;
+        Ok(((val >> 2) & 0x01) != 0)
+    }
+
     /// Gets the chip ID
     pub fn get_chip_id(&mut self) -> Result<u8, PmuSensorError> {
         let result = self.dev.read_register(0x14)?;
@@ -1302,10 +1363,14 @@ where
 
         text.push_str(&format!("USB PlugIn: {is_vbus_present}\n"));
         text.push_str(&format!("Bus state: {}\n", self.get_bus_status()?));
+
+        let battery_voltage = self.get_battery_voltage()?;
+        let battery_percentage = self.get_battery_percentage()?;
         text.push_str(&format!(
-            "Battery voltage: {}mV\n",
-            self.get_battery_voltage()?
+            "Battery: {}mV ({}%)\n",
+            battery_voltage, battery_percentage
         ));
+
         text.push_str(&format!("USB voltage: {}mV\n", self.get_vbus_voltage()?));
         text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage()?));
         text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));

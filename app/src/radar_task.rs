@@ -30,6 +30,6 @@ pub async fn radar_task(mut radar: RadarSensor) {
         if let Ok(Some(event)) = radar.get_radar_data() {
             info!("Radar data: {event:?}");
         }
-        Timer::after_millis(100).await
+        Timer::after_millis(200).await
     }
 }
