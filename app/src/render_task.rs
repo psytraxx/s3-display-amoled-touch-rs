@@ -57,7 +57,7 @@ async fn process_touch(
         return;
     }
     // Read the touch data
-    match touch.read_touch() {
+    match touch.read_touch().await {
         Ok(point) => {
             // Ignore events with 0 points unless it's an 'Up' event
             if point.points == 0 && point.event != Event::Up {

@@ -15,15 +15,15 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 use alloc::boxed::Box;
 use controller::Controller;
-use drivers::bq25896::BQ25896;
-use drivers::cst816x::{CST816x, IrqControl};
-use drivers::ld2410::LD2410;
+use drivers::bq25896::asynch::BQ25896Async;
+use drivers::cst816x::asynch::CST816xAsync;
+use drivers::cst816x::IrqControl;
+use drivers::ld2410::asynch::LD2410Async;
+use core::cell::UnsafeCell;
+use core::sync::atomic::AtomicBool;
 use embassy_executor::Spawner;
 use embassy_time::Delay;
-use embedded_hal::i2c::I2c as I2cTrait;
-use embedded_hal_bus::i2c::AtomicDevice;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use embedded_hal_bus::util::AtomicCell;
 use esp_alloc::psram_allocator;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
@@ -38,7 +38,7 @@ use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
 use esp_hal::time::Rate;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
-use esp_hal::{dma_buffers, uart, Blocking};
+use esp_hal::{dma_buffers, uart, Async, Blocking};
 use log::{error, info};
 use mipidsi::interface::SpiInterface;
 use mipidsi::models::RM67162;
@@ -51,6 +51,165 @@ use slint::{ComponentHandle, PhysicalSize};
 use slint_backend::Backend;
 use slint_generated::AppWindow;
 use static_cell::StaticCell;
+
+// Simple atomic cell for I2C bus sharing
+pub struct I2cCell<T> {
+    bus: UnsafeCell<T>,
+    busy: AtomicBool,
+}
+
+impl<T> I2cCell<T> {
+    pub const fn new(bus: T) -> Self {
+        Self {
+            bus: UnsafeCell::new(bus),
+            busy: AtomicBool::new(false),
+        }
+    }
+}
+
+unsafe impl<T> Sync for I2cCell<T> {}
+
+// Async-compatible atomic I2C device wrapper
+pub struct AsyncAtomicDevice<'a, T> {
+    bus: &'a I2cCell<T>,
+}
+
+impl<'a, T> AsyncAtomicDevice<'a, T> {
+    pub fn new(bus: &'a I2cCell<T>) -> Self {
+        Self { bus }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum AtomicI2cError<T> {
+    Busy,
+    I2c(T),
+}
+
+impl<T> embedded_hal::i2c::Error for AtomicI2cError<T>
+where
+    T: embedded_hal::i2c::Error,
+{
+    fn kind(&self) -> embedded_hal::i2c::ErrorKind {
+        match self {
+            AtomicI2cError::Busy => embedded_hal::i2c::ErrorKind::Other,
+            AtomicI2cError::I2c(e) => e.kind(),
+        }
+    }
+}
+
+impl<T> embedded_hal_async::i2c::ErrorType for AsyncAtomicDevice<'_, T>
+where
+    T: embedded_hal_async::i2c::I2c,
+{
+    type Error = AtomicI2cError<T::Error>;
+}
+
+impl<T> embedded_hal_async::i2c::I2c for AsyncAtomicDevice<'_, T>
+where
+    T: embedded_hal_async::i2c::I2c,
+{
+    async fn read(&mut self, address: u8, read: &mut [u8]) -> Result<(), Self::Error> {
+        self.bus
+            .busy
+            .compare_exchange(
+                false,
+                true,
+                core::sync::atomic::Ordering::SeqCst,
+                core::sync::atomic::Ordering::SeqCst,
+            )
+            .map_err(|_| AtomicI2cError::Busy)?;
+
+        let result = unsafe { &mut *self.bus.bus.get() }
+            .read(address, read)
+            .await
+            .map_err(AtomicI2cError::I2c);
+
+        self.bus
+            .busy
+            .store(false, core::sync::atomic::Ordering::SeqCst);
+
+        result
+    }
+
+    async fn write(&mut self, address: u8, write: &[u8]) -> Result<(), Self::Error> {
+        self.bus
+            .busy
+            .compare_exchange(
+                false,
+                true,
+                core::sync::atomic::Ordering::SeqCst,
+                core::sync::atomic::Ordering::SeqCst,
+            )
+            .map_err(|_| AtomicI2cError::Busy)?;
+
+        let result = unsafe { &mut *self.bus.bus.get() }
+            .write(address, write)
+            .await
+            .map_err(AtomicI2cError::I2c);
+
+        self.bus
+            .busy
+            .store(false, core::sync::atomic::Ordering::SeqCst);
+
+        result
+    }
+
+    async fn write_read(
+        &mut self,
+        address: u8,
+        write: &[u8],
+        read: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        self.bus
+            .busy
+            .compare_exchange(
+                false,
+                true,
+                core::sync::atomic::Ordering::SeqCst,
+                core::sync::atomic::Ordering::SeqCst,
+            )
+            .map_err(|_| AtomicI2cError::Busy)?;
+
+        let result = unsafe { &mut *self.bus.bus.get() }
+            .write_read(address, write, read)
+            .await
+            .map_err(AtomicI2cError::I2c);
+
+        self.bus
+            .busy
+            .store(false, core::sync::atomic::Ordering::SeqCst);
+
+        result
+    }
+
+    async fn transaction(
+        &mut self,
+        address: u8,
+        operations: &mut [embedded_hal_async::i2c::Operation<'_>],
+    ) -> Result<(), Self::Error> {
+        self.bus
+            .busy
+            .compare_exchange(
+                false,
+                true,
+                core::sync::atomic::Ordering::SeqCst,
+                core::sync::atomic::Ordering::SeqCst,
+            )
+            .map_err(|_| AtomicI2cError::Busy)?;
+
+        let result = unsafe { &mut *self.bus.bus.get() }
+            .transaction(address, operations)
+            .await
+            .map_err(AtomicI2cError::I2c);
+
+        self.bus
+            .busy
+            .store(false, core::sync::atomic::Ordering::SeqCst);
+
+        result
+    }
+}
 
 mod controller;
 mod display_line_buffer;
@@ -82,11 +241,11 @@ pub type TouchDisplay = Display<
     Output<'static>,
 >;
 
-pub type Charger = BQ25896<AtomicDevice<'static, I2c<'static, Blocking>>>;
+pub type Charger = BQ25896Async<AsyncAtomicDevice<'static, I2c<'static, Async>>>;
 
-pub type RadarSensor = LD2410<Uart<'static, Blocking>, Delay>;
+pub type RadarSensor = LD2410Async<Uart<'static, Async>, Delay>;
 
-pub type Touchpad = CST816x<AtomicDevice<'static, I2c<'static, Blocking>>, Input<'static>>;
+pub type Touchpad = CST816xAsync<AsyncAtomicDevice<'static, I2c<'static, Async>>, Input<'static>>;
 
 /// Main entry point for the application
 #[esp_rtos::main]
@@ -116,7 +275,7 @@ async fn main(spawner: Spawner) {
     let i2c_bus = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
 
     // Detect the connected SPI board model via I2C communication
-    detect_spi_model(i2c_bus);
+    detect_spi_model(i2c_bus).await;
 
     // Create the GUI window for Slint's minimal software renderer
     let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
@@ -157,7 +316,7 @@ async fn main(spawner: Spawner) {
     // Initialize the PMU for battery charging control
     let mut pmu = initialize_pmu(i2c_bus).await;
     // Populate initial PMU info into the UI text area (scrollable Flickable in Slint)
-    if let Ok(info) = pmu.get_info() {
+    if let Ok(info) = pmu.get_info().await {
         app_window.set_text(info.into());
     }
 
@@ -172,50 +331,57 @@ fn initialize_i2c(
     i2c: I2C0<'static>,
     sda: GPIO3<'static>,
     scl: GPIO2<'static>,
-) -> &'static AtomicCell<I2c<'static, Blocking>> {
+) -> &'static AtomicCell<I2c<'static, Async>> {
     // Create a new I2C master instance with default configuration
     let i2c = I2c::new(i2c, esp_hal::i2c::master::Config::default())
         .unwrap()
         .with_sda(sda)
-        .with_scl(scl);
+        .with_scl(scl)
+        .into_async();
 
     // Use a StaticCell for static storage of the AtomicCell wrapping the I2C instance
-    static I2C_INSTANCE: StaticCell<AtomicCell<I2c<'static, Blocking>>> = StaticCell::new();
+    static I2C_INSTANCE: StaticCell<AtomicCell<I2c<'static, Async>>> = StaticCell::new();
     I2C_INSTANCE.init(AtomicCell::new(i2c))
 }
 
 /// Configures the touch sensor driver (CST816S) by wrapping the I2C bus and input pin.
 /// Returns an instance of the touchpad driver.
 async fn initialize_touchpad(
-    i2c: &'static AtomicCell<I2c<'static, Blocking>>,
+    i2c: &'static AtomicCell<I2c<'static, Async>>,
     touch: GPIO21<'static>,
 ) -> Touchpad {
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
-    let i2c_device = AtomicDevice::new(i2c);
-    let mut touchpad = CST816x::new(i2c_device, touch_pin);
+    let i2c_device = AsyncAtomicDevice::new(i2c);
+    let mut touchpad = CST816xAsync::new(i2c_device, touch_pin);
     let irq_config = IrqControl::EN_TOUCH | IrqControl::EN_CHANGE | IrqControl::EN_MOTION;
     touchpad
         .set_irq_control(&irq_config)
+        .await
         .expect("Failed to set IRQ control");
     touchpad
         .enable_auto_reset(5)
+        .await
         .expect("Failed to enable auto-reset");
     let irq_config = touchpad
         .get_irq_control()
+        .await
         .expect("Failed to get IRQ control");
     info!("IRQ control: 0x{:X}", irq_config.bits());
-    let chip_id = touchpad.get_chip_id().expect("Failed to get chip ID");
+    let chip_id = touchpad.get_chip_id().await.expect("Failed to get chip ID");
     info!("Touchpad chip ID: {chip_id}");
     let motion_mask = touchpad
         .get_motion_mask()
+        .await
         .expect("Failed to get motion mask");
     info!("Motion mask: 0x{motion_mask:X}");
     touchpad
         .set_irq_pulse_width(10)
+        .await
         .expect("Failed to set pulse width");
     let pulse_config = touchpad
         .get_irq_pulse_width()
+        .await
         .expect("Failed to get pulse config");
     info!("Pulse width: {pulse_config:?}");
 
@@ -239,10 +405,10 @@ fn initialize_radar(
     let uart0 = uart::Uart::new(uart1, config).expect("Failed to initialize UART0");
 
     // Associate the UART with its designated RX and TX GPIO pins
-    let uart0 = uart0.with_rx(rx_pin).with_tx(tx_pin);
+    let uart0 = uart0.with_rx(rx_pin).with_tx(tx_pin).into_async();
 
     // Construct the radar driver with the configured UART and a delay provider
-    LD2410::new(uart0, Delay)
+    LD2410Async::new(uart0, Delay)
 }
 
 /// Initializes the SPI-connected display and configures its DMA buffers.
@@ -306,14 +472,15 @@ fn initialize_display(
 
 /// Detects the model of the connected SPI board via I2C communication.
 /// This helps in determining the correct driver configuration.
-fn detect_spi_model(i2c_ref_cell: &'static AtomicCell<I2c<'static, Blocking>>) {
+async fn detect_spi_model(i2c_ref_cell: &'static AtomicCell<I2c<'static, Async>>) {
     // Create an I2C device instance for peripheral communication
-    let mut i2c = AtomicDevice::new(i2c_ref_cell);
+    let mut i2c = AsyncAtomicDevice::new(i2c_ref_cell);
 
     // Try to communicate with a known I2C address to identify the board model
-    if i2c.write(0x15, &[]).is_ok() {
+    use embedded_hal_async::i2c::I2c as _;
+    if i2c.write(0x15, &[]).await.is_ok() {
         // Check a secondary address to distinguish between SPI and QSPI models
-        if i2c.write(0x51, &[]).is_ok() {
+        if i2c.write(0x51, &[]).await.is_ok() {
             info!("Detected 1.91-inch SPI board model!");
         } else {
             info!("Detected 1.91-inch QSPI board model!");
@@ -327,105 +494,123 @@ fn detect_spi_model(i2c_ref_cell: &'static AtomicCell<I2c<'static, Blocking>>) {
 /// It sets the charging target voltage, precharge current, and fast charge current limits,
 /// enables ADC for power measurement, and logs the configuration details.
 /// Returns the configured PMU instance.
-async fn initialize_pmu(i2c_ref_cell: &'static AtomicCell<I2c<'static, Blocking>>) -> Charger {
-    let i2c = AtomicDevice::new(i2c_ref_cell);
+async fn initialize_pmu(i2c_ref_cell: &'static AtomicCell<I2c<'static, Async>>) -> Charger {
+    let i2c = AsyncAtomicDevice::new(i2c_ref_cell);
 
     // Create a new PMU instance on the I2C bus at the designated slave address
-    let mut pmu = BQ25896::new(i2c, BQ25896_SLAVE_ADDRESS).expect("Failed to initialize BQ25896");
+    let mut pmu = BQ25896Async::new(i2c, BQ25896_SLAVE_ADDRESS);
+    pmu.init().await.expect("Failed to initialize BQ25896");
 
     // Set the battery charger target voltage
     pmu.set_charge_target_voltage(PMU_CHARGE_TARGET_VOLTAGE)
+        .await
         .expect("set_charge_target_voltage failed");
 
     // Set the precharge current for battery charging
     pmu.set_precharge_current(PMU_PRECHARGE_CURRENT)
+        .await
         .expect("set_precharge_current failed");
 
     // Set the fast (constant) charge current limit
     pmu.set_fast_charge_current_limit(PMU_CONSTANT_CHARGE_CURRENT)
+        .await
         .expect("set_fast_charge_current_limit failed");
 
     // Enable ADC for power measurement in the PMU
-    pmu.set_adc_enabled().expect("set_adc_enabled failed");
+    pmu.set_adc_enabled()
+        .await
+        .expect("set_adc_enabled failed");
 
     info!(
         "Fast charge current limit: {}",
-        pmu.get_fast_charge_current_limit()
+        pmu.get_fast_charge_current_limit() 
+            .await
             .expect("get_fast_charge_current_limit failed")
     );
 
     info!(
         "Precharge current: {}",
         pmu.get_precharge_current()
+            .await
             .expect("get_precharge_current failed")
     );
 
     info!(
         "Charge target voltage: {}",
         pmu.get_charge_target_voltage()
+            .await
             .expect("get_charge_target_voltage failed")
     );
 
     info!(
         "Boost frequency:  {}",
-        pmu.get_boost_freq().expect("get_boost_freq failed")
+        pmu.get_boost_freq().await.expect("get_boost_freq failed")
     );
 
     info!(
         "Fast charge timer: {}",
         pmu.get_fast_charge_timer()
+            .await
             .expect("get_fast_charge_timer failed")
     );
 
     info!(
         "Termination curr.: {}mA",
         pmu.get_termination_current()
+            .await
             .expect("get_termination_current failed")
     );
 
     info!(
         "Power down voltage: {}mV",
-        pmu.get_sys_power_down_voltage()
+        pmu.get_sys_power_down_voltage() 
+            .await
             .expect("get_sys_power_down_voltage failed")
     );
 
     info!(
         "Automatic input detection: {}",
         pmu.is_automatic_input_detection_enabled()
+            .await
             .expect("is_automatic_input_detection_enabled failed")
     );
 
     info!(
         "HIZ mode: {}",
-        pmu.is_hiz_mode().expect("is_hiz_mode failed")
+        pmu.is_hiz_mode().await.expect("is_hiz_mode failed")
     );
 
     info!(
         "Charging safety timer: {}",
         pmu.is_charging_safety_timer_enabled()
+            .await
             .expect("is_charging_safety_timer_enabled failed")
     );
 
     info!(
         "Input detection enabled: {}",
         pmu.is_input_detection_enabled()
+            .await
             .expect("is_input_detection_enabled failed")
     );
 
     info!(
         "Input current optimizer: {}",
         pmu.is_input_current_optimizer()
+            .await
             .expect("is_input_current_optimizer failed")
     );
 
     info!(
         "PMU chip id: {}",
-        pmu.get_chip_id().expect("get_chip_id failed")
+        pmu.get_chip_id().await.expect("get_chip_id failed")
     );
 
     info!(
         "Charge current: {}mA",
-        pmu.get_charge_current().expect("get_charge_current failed")
+        pmu.get_charge_current()
+            .await
+            .expect("get_charge_current failed")
     );
 
     pmu
