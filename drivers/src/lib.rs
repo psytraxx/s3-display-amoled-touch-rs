@@ -19,7 +19,7 @@ pub mod ld2410;
 extern crate alloc;
 
 #[derive(Debug)]
-struct BlockingRegisterDevice<I2C> {
+pub(crate) struct BlockingRegisterDevice<I2C> {
     i2c: I2C,
     adr: u8,
 }
@@ -69,12 +69,14 @@ where
     }
 }
 
+#[cfg(feature = "async")]
 #[derive(Debug)]
-struct AsyncRegisterDevice<I2C> {
+pub(crate) struct AsyncRegisterDevice<I2C> {
     i2c: I2C,
     adr: u8,
 }
 
+#[cfg(feature = "async")]
 impl<I2C> AsyncRegisterDevice<I2C>
 where
     I2C: embedded_hal_async::i2c::I2c,

@@ -284,5 +284,6 @@ pub enum ExitBoostModeVolt {
     MiniVolt2V5,
 }
 
+#[cfg(feature = "async")]
 pub mod asynch;
 pub mod blocking;

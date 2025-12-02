@@ -326,12 +326,12 @@ async fn main(spawner: Spawner) {
 }
 
 /// Initialize the I2C bus used to communicate with external devices.
-/// Returns a shared, thread-safe reference (AtomicCell) for the I2C instance.
+/// Returns a shared, thread-safe reference (I2cCell) for the I2C instance.
 fn initialize_i2c(
     i2c: I2C0<'static>,
     sda: GPIO3<'static>,
     scl: GPIO2<'static>,
-) -> &'static AtomicCell<I2c<'static, Async>> {
+) -> &'static I2cCell<I2c<'static, Async>> {
     // Create a new I2C master instance with default configuration
     let i2c = I2c::new(i2c, esp_hal::i2c::master::Config::default())
         .unwrap()
@@ -339,15 +339,15 @@ fn initialize_i2c(
         .with_scl(scl)
         .into_async();
 
-    // Use a StaticCell for static storage of the AtomicCell wrapping the I2C instance
-    static I2C_INSTANCE: StaticCell<AtomicCell<I2c<'static, Async>>> = StaticCell::new();
-    I2C_INSTANCE.init(AtomicCell::new(i2c))
+    // Use a StaticCell for static storage of the I2cCell wrapping the I2C instance
+    static I2C_INSTANCE: StaticCell<I2cCell<I2c<'static, Async>>> = StaticCell::new();
+    I2C_INSTANCE.init(I2cCell::new(i2c))
 }
 
 /// Configures the touch sensor driver (CST816S) by wrapping the I2C bus and input pin.
 /// Returns an instance of the touchpad driver.
 async fn initialize_touchpad(
-    i2c: &'static AtomicCell<I2c<'static, Async>>,
+    i2c: &'static I2cCell<I2c<'static, Async>>,
     touch: GPIO21<'static>,
 ) -> Touchpad {
     // Configure the GPIO pin used for touch input (no pull-up/down)
@@ -472,7 +472,7 @@ fn initialize_display(
 
 /// Detects the model of the connected SPI board via I2C communication.
 /// This helps in determining the correct driver configuration.
-async fn detect_spi_model(i2c_ref_cell: &'static AtomicCell<I2c<'static, Async>>) {
+async fn detect_spi_model(i2c_ref_cell: &'static I2cCell<I2c<'static, Async>>) {
     // Create an I2C device instance for peripheral communication
     let mut i2c = AsyncAtomicDevice::new(i2c_ref_cell);
 
@@ -494,7 +494,7 @@ async fn detect_spi_model(i2c_ref_cell: &'static AtomicCell<I2c<'static, Async>>
 /// It sets the charging target voltage, precharge current, and fast charge current limits,
 /// enables ADC for power measurement, and logs the configuration details.
 /// Returns the configured PMU instance.
-async fn initialize_pmu(i2c_ref_cell: &'static AtomicCell<I2c<'static, Async>>) -> Charger {
+async fn initialize_pmu(i2c_ref_cell: &'static I2cCell<I2c<'static, Async>>) -> Charger {
     let i2c = AsyncAtomicDevice::new(i2c_ref_cell);
 
     // Create a new PMU instance on the I2C bus at the designated slave address
