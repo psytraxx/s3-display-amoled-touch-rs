@@ -17,10 +17,13 @@ export component AppWindow inherits Window {
         Flickable {
             width: parent.width * 0.75;
             height: parent.height;
-            Text {
+            viewport-width: self.width;
+            viewport-height: text-element.preferred-height;
+
+            text-element := Text {
                 text: root.text;
                 font-size: Theme.font-size-small;
-                width: parent.width;
+                width: parent.viewport-width;
                 wrap: TextWrap.word-wrap;
                 horizontal-alignment: left;
                 vertical-alignment: top;
