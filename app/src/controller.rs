@@ -43,27 +43,50 @@ impl<'a> Controller<'a> {
 
     pub async fn process_action(&mut self, action: Action) -> Result<(), ()> {
         match action {
-            Action::RequestUpdate => {
-                let text = self.pmu.get_info().await.expect("failed to get info");
-                self.app_window.set_text(text.into());
-            }
-            Action::ToggleCharger(state) => {
-                if state {
-                    self.pmu
-                        .set_charge_enabled()
-                        .await
-                        .expect("set_charge_enable failed");
-                } else {
-                    self.pmu
-                        .set_charge_disabled()
-                        .await
-                        .expect("set_charge_disabled failed");
+            Action::RequestUpdate => match self.pmu.get_info().await {
+                Ok(text) => {
+                    self.app_window.set_text(text.into());
                 }
+                Err(e) => {
+                    error!("Failed to get PMU info: {e:?}");
+                    self.app_window
+                        .set_text("Error: Failed to read PMU data\nCheck I2C connection".into());
+                    return Err(());
+                }
+            },
+            Action::ToggleCharger(state) => {
+                let result = if state {
+                    self.pmu.set_charge_enabled().await
+                } else {
+                    self.pmu.set_charge_disabled().await
+                };
 
-                info!("set_charge_enabled: {state:?}");
-
-                let text = self.pmu.get_info().await.expect("failed to get info");
-                self.app_window.set_text(text.into());
+                match result {
+                    Ok(_) => {
+                        info!("Charger state changed to: {state}");
+                        // Update the display with new PMU info
+                        match self.pmu.get_info().await {
+                            Ok(text) => {
+                                self.app_window.set_text(text.into());
+                            }
+                            Err(e) => {
+                                error!("Failed to get PMU info after toggle: {e:?}");
+                                self.app_window.set_text(
+                                    "Charger toggled but info read failed\nCheck I2C connection"
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to toggle charger to {state}: {e:?}");
+                        self.app_window.set_text(
+                            "Error: Failed to toggle charger\nI2C communication error\nTry again or check hardware"
+                                .into(),
+                        );
+                        return Err(());
+                    }
+                }
             }
         }
         Ok(())

@@ -14,25 +14,32 @@ export component AppWindow inherits Window {
 
     HorizontalLayout {
 
-        Flickable {
+        Rectangle {
             width: parent.width * 0.75;
             height: parent.height;
-            interactive: true;
-            viewport-width: self.width;
-            viewport-height: text-element.preferred-height;
+            background: white;
 
-            text-element := Text {
-                text: root.text;
-                font-size: Theme.font-size-small;
-                width: parent.viewport-width;
-                wrap: TextWrap.word-wrap;
-                horizontal-alignment: left;
-                vertical-alignment: top;
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                interactive: true;
+                viewport-width: self.width;
+                viewport-height: text-element.preferred-height;
+
+                text-element := Text {
+                    text: root.text;
+                    font-size: Theme.font-size-small;
+                    width: parent.viewport-width;
+                    wrap: TextWrap.word-wrap;
+                    horizontal-alignment: left;
+                    vertical-alignment: top;
+                }
             }
         }
 
         VerticalLayout {
             width: parent.width * 0.25;
+            height: parent.height;
             alignment: LayoutAlignment.start;
             padding: 10px;
 

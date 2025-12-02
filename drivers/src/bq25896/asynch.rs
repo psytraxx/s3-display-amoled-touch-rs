@@ -1419,7 +1419,11 @@ where
             self.is_input_current_limit().await?,
             self.get_sys_voltage().await?,
             self.get_sys_power_down_voltage().await?,
-            if self.is_thermal_regulation_normal().await? { "Normal" } else { "Active" },
+            if self.is_thermal_regulation_normal().await? {
+                "Normal"
+            } else {
+                "Active"
+            },
             self.is_otg_enabled().await?,
             self.is_hiz_mode().await?,
             self.is_bat_load_enabled().await?,
@@ -1434,7 +1438,11 @@ where
             self.is_ntc_fault().await?,
             self.get_chip_id().await?,
             self.get_device_config().await?,
-            if self.get_temperature_profile().await? { "JEITA" } else { "Standard" },
+            if self.get_temperature_profile().await? {
+                "JEITA"
+            } else {
+                "Standard"
+            },
         );
 
         Ok(text)
