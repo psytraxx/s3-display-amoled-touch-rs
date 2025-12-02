@@ -221,8 +221,7 @@ where
         };
 
         // Process software gestures
-        self.gesture_state
-            .process(&mut data, &self.gesture_config);
+        self.gesture_state.process(&mut data, &self.gesture_config);
 
         Ok(Some(data))
     }
