@@ -33,10 +33,11 @@ esp-println = { version = "0.16.1", features = ["esp32s3", "log-04"] }
 embassy-executor = { version = "0.9.1", features = ["log"] }
 embassy-time = { version = "0.5.0", features = ["log"] }
 mipidsi = { git = "https://github.com/almindor/mipidsi.git", branch = "master" }
-drivers = { path = "../drivers", features = ["log-04"] }
+drivers = { path = "../drivers", features = ["log-04", "async"] }
 embedded-graphics-core = { version = "0.4.0", features = [] }
-embedded-hal-bus = { version = "0.3.0", features = [] }
+embedded-hal-bus = { version = "0.3.0", features = ["async"] }
 embedded-hal = { version = "1.0.0", features = [] }
+embedded-hal-async = { version = "1.0.0", features = [] }
 libm = "0.2.15"
 slint = { version = "1.14.1", default-features = false, features = [
     "libm",

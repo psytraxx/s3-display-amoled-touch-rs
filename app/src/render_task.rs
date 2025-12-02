@@ -1,5 +1,5 @@
 use alloc::rc::Rc;
-use drivers::cst816x::Event;
+use drivers::cst816x::{Event, Gesture};
 use embassy_time::Timer;
 use log::{error, info};
 use slint::{
@@ -57,8 +57,12 @@ async fn process_touch(
         return;
     }
     // Read the touch data
-    match touch.read_touch() {
-        Ok(point) => {
+    match touch.read_touch().await {
+        Ok(Some(point)) => {
+            if point.gesture != Gesture::None {
+                info!("Gesture detected: {:?}", point.gesture);
+            }
+
             // Ignore events with 0 points unless it's an 'Up' event
             if point.points == 0 && point.event != Event::Up {
                 // Potentially spurious event, ignore or log if needed
@@ -114,6 +118,7 @@ async fn process_touch(
                     .expect("Event dispatch failed");
             }
         }
+        Ok(None) => {}
         Err(e) => {
             error!("Touch read error: {e:?}");
         }
