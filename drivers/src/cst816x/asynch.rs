@@ -13,7 +13,6 @@ pub struct CST816xAsync<I2C, PIN, RST, DELAY> {
     touch_int: PIN,
     rst_pin: Option<RST>,
     delay: DELAY,
-    last_buffer: [u8; 7],
     gesture_state: GestureState,
     gesture_config: SoftwareGestureConfig,
 }
@@ -32,7 +31,6 @@ where
             touch_int,
             rst_pin,
             delay,
-            last_buffer: [0u8; 7],
             gesture_state: GestureState::default(),
             gesture_config: SoftwareGestureConfig::default(),
         }
@@ -181,15 +179,9 @@ where
             .map_err(|_| TouchSensorError::PinError)
     }
 
-    pub async fn read_touch(&mut self) -> Result<Option<TouchData>, TouchSensorError> {
+    pub async fn read_touch(&mut self) -> Result<TouchData, TouchSensorError> {
         let mut buffer = [0u8; 7];
         self.dev.read_register_buffer(0x01, &mut buffer).await?;
-
-        // Duplicate check
-        if buffer == self.last_buffer {
-            return Ok(None);
-        }
-        self.last_buffer = buffer;
 
         // Indices adjusted based on reading from 0x01
         // If the hardware reports an invalid gesture ID (or 0x00), treat it as None.
@@ -215,6 +207,6 @@ where
         // Process software gestures
         self.gesture_state.process(&mut data, &self.gesture_config);
 
-        Ok(Some(data))
+        Ok(data)
     }
 }
