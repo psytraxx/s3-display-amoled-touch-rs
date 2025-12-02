@@ -70,23 +70,33 @@ async fn process_touch(
                 return;
             }
             let button = PointerEventButton::Left;
-            // Use the coordinates from the touch data
-            let position = LogicalPosition::new(
-                DISPLAY_WIDTH as f32 - point.x as f32,
-                DISPLAY_HEIGHT as f32 - point.y as f32,
-            );
+
+            // Transform and clamp coordinates to valid screen bounds
+            let x = (DISPLAY_WIDTH as f32 - point.x as f32).clamp(0.0, DISPLAY_WIDTH as f32 - 1.0);
+            let y = (DISPLAY_HEIGHT as f32 - point.y as f32).clamp(0.0, DISPLAY_HEIGHT as f32 - 1.0);
+            let position = LogicalPosition::new(x, y);
 
             let event = match point.event {
                 Event::Down => {
-                    // Only send Pressed if not already down
-                    if last_touch.is_none() {
-                        last_touch.replace(position);
-                        Some(WindowEvent::PointerPressed { position, button })
+                    // On new Down event, always send Pressed to start a new gesture
+                    // This ensures Slint's Flickable knows a new drag is starting
+                    if last_touch.is_some() {
+                        // We had a previous touch that wasn't properly released
+                        // Send an explicit release first to clean up state
+                        info!("Found unreleased touch on new Down, cleaning up");
+                        if let Some(old_pos) = last_touch.replace(position) {
+                            // First release the old touch
+                            window
+                                .try_dispatch_event(WindowEvent::PointerReleased {
+                                    position: old_pos,
+                                    button,
+                                })
+                                .ok();
+                        }
                     } else {
-                        // Already pressed, treat as move? Or ignore? Let's treat as move.
                         last_touch.replace(position);
-                        Some(WindowEvent::PointerMoved { position })
                     }
+                    Some(WindowEvent::PointerPressed { position, button })
                 }
                 Event::Contact => {
                     // Send Moved only if currently pressed
@@ -94,17 +104,21 @@ async fn process_touch(
                         last_touch.replace(position);
                         Some(WindowEvent::PointerMoved { position })
                     } else {
-                        None
+                        // Got Contact without Down - treat as implicit down
+                        info!("Contact without Down, treating as implicit press");
+                        last_touch.replace(position);
+                        Some(WindowEvent::PointerPressed { position, button })
                     }
                 }
                 Event::Up => {
-                    // Send Released only if currently pressed
-                    if last_touch.take().is_some() {
-                        // Use the last known down position for release? Or current point's position?
-                        // Slint usually expects the position where the release occurred.
-                        Some(WindowEvent::PointerReleased { position, button })
+                    // Send Released using the last valid position we tracked
+                    if let Some(last_pos) = last_touch.take() {
+                        // Use the last tracked position for more reliable release
+                        // This helps when finger slides off screen during drag
+                        Some(WindowEvent::PointerReleased { position: last_pos, button })
                     } else {
-                        // Up event without prior Down? Ignore.
+                        // Up event without prior Down - send exit
+                        info!("Up without Down, sending exit");
                         Some(WindowEvent::PointerExited)
                     }
                 }

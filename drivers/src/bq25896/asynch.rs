@@ -1340,49 +1340,102 @@ where
             false => "No",
         };
 
-        let mut text = format!(
-            "CHG state: {}
-",
-            self.get_charge_status().await?
-        );
-
-        text.push_str(&format!("USB PlugIn: {is_vbus_present}\n"));
-        text.push_str(&format!("Bus state: {}\n", self.get_bus_status().await?));
-
-        let battery_voltage = self.get_battery_voltage().await?;
-        let battery_percentage = self.get_battery_percentage().await?;
-        text.push_str(&format!(
-            "Battery: {}mV ({}%)\n",
-            battery_voltage, battery_percentage,
-        ));
-        text.push_str(&format!(
-            "Charge current: {}mA\n",
-            self.get_charge_current().await?
-        ));
-        text.push_str(&format!(
-            "Temperature: {}°C\n",
-            self.get_temperature().await?
-        ));
-        text.push_str(&format!(
-            "Charger fast charge curr.: {}mA\n",
+        let text = format!(
+            "═══ POWER STATUS ═══\n\
+            CHG state: {}\n\
+            USB PlugIn: {}\n\
+            Bus state: {}\n\
+            Power good: {}\n\
+            Charging enabled: {}\n\
+            \n\
+            ═══ BATTERY ═══\n\
+            Voltage: {}mV ({}%)\n\
+            Charge current: {}mA\n\
+            Temperature: {:.1}°C\n\
+            NTC status: {}\n\
+            \n\
+            ═══ CHARGER CONFIG ═══\n\
+            Fast charge limit: {}mA\n\
+            Precharge current: {}mA\n\
+            Termination current: {}mA\n\
+            Target voltage: {}mV\n\
+            Fast charge timer: {}\n\
+            \n\
+            ═══ INPUT ═══\n\
+            USB voltage: {}mV\n\
+            USB good: {}\n\
+            Input curr. limit: {}mA\n\
+            ICO in progress: {}\n\
+            ICO limit in effect: {}mA\n\
+            DPM active: {}\n\
+            Input curr. limit active: {}\n\
+            \n\
+            ═══ SYSTEM ═══\n\
+            SYS voltage: {}mV\n\
+            Power down voltage: {}mV\n\
+            Thermal regulation: {}\n\
+            \n\
+            ═══ MODES & FEATURES ═══\n\
+            OTG enabled: {}\n\
+            HIZ mode: {}\n\
+            Battery load enabled: {}\n\
+            Boost frequency: {}\n\
+            Charging safety timer: {}\n\
+            Charging termination: {}\n\
+            Auto input detection: {}\n\
+            \n\
+            ═══ FAULTS ═══\n\
+            Watchdog fault: {}\n\
+            Boost fault: {}\n\
+            Charge fault: {:?}\n\
+            Battery fault: {}\n\
+            NTC fault: {}\n\
+            \n\
+            ═══ DEVICE INFO ═══\n\
+            Chip ID: {}\n\
+            Device config: {}\n\
+            Temperature profile: {}\n",
+            self.get_charge_status().await?,
+            is_vbus_present,
+            self.get_bus_status().await?,
+            self.is_power_good().await?,
+            self.is_charge_enabled().await?,
+            self.get_battery_voltage().await?,
+            self.get_battery_percentage().await?,
+            self.get_charge_current().await?,
+            self.get_temperature().await?,
+            self.get_ntc_status_string().await?,
             self.get_fast_charge_current_limit().await?,
-        ));
-        text.push_str(&format!(
-            "Charger target voltage: {}mV\n",
+            self.get_precharge_current().await?,
+            self.get_termination_current().await?,
             self.get_charge_target_voltage().await?,
-        ));
-        text.push_str(&format!(
-            "Input curr. limit: {}mA\n",
-            self.get_input_current_limit().await?
-        ));
-        text.push_str(&format!(
-            "USB voltage: {}mV\n",
-            self.get_vbus_voltage().await?
-        ));
-        text.push_str(&format!(
-            "SYS voltage: {}mV\n",
-            self.get_sys_voltage().await?
-        ));
+            self.get_fast_charge_timer().await?,
+            self.get_vbus_voltage().await?,
+            self.is_vbus_good().await?,
+            self.get_input_current_limit().await?,
+            self.is_input_current_optimizer().await?,
+            self.get_input_current_limit_in_effect().await?,
+            self.is_dynamic_power_management().await?,
+            self.is_input_current_limit().await?,
+            self.get_sys_voltage().await?,
+            self.get_sys_power_down_voltage().await?,
+            if self.is_thermal_regulation_normal().await? { "Normal" } else { "Active" },
+            self.is_otg_enabled().await?,
+            self.is_hiz_mode().await?,
+            self.is_bat_load_enabled().await?,
+            self.get_boost_freq().await?,
+            self.is_charging_safety_timer_enabled().await?,
+            self.is_charging_termination_enabled().await?,
+            self.is_automatic_input_detection_enabled().await?,
+            self.is_watchdog_fault().await?,
+            self.is_boost_fault().await?,
+            self.get_charge_fault().await?,
+            self.is_battery_fault().await?,
+            self.is_ntc_fault().await?,
+            self.get_chip_id().await?,
+            self.get_device_config().await?,
+            if self.get_temperature_profile().await? { "JEITA" } else { "Standard" },
+        );
 
         Ok(text)
     }
