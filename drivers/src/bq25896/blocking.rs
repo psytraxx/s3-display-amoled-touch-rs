@@ -22,8 +22,7 @@ pub struct BQ25896<I2C> {
     user_disable_charge: bool,
 }
 
-impl<I2C>
-    BQ25896<I2C>
+impl<I2C> BQ25896<I2C>
 where
     I2C: I2c,
 {
@@ -1317,14 +1316,25 @@ where
         let battery_percentage = self.get_battery_percentage()?;
         text.push_str(&format!(
             "Battery: {}mV ({}%)\n",
-            battery_voltage,
-            battery_percentage,
+            battery_voltage, battery_percentage,
         ));
-        text.push_str(&format!("Charge current: {}mA\n", self.get_charge_current()?));
+        text.push_str(&format!(
+            "Charge current: {}mA\n",
+            self.get_charge_current()?
+        ));
         text.push_str(&format!("Temperature: {}°C\n", self.get_temperature()?));
-        text.push_str(&format!("Charger fast charge curr.: {}mA\n", self.get_fast_charge_current_limit()?));
-        text.push_str(&format!("Charger target voltage: {}mV\n", self.get_charge_target_voltage()?));
-        text.push_str(&format!("Input curr. limit: {}mA\n", self.get_input_current_limit()?));
+        text.push_str(&format!(
+            "Charger fast charge curr.: {}mA\n",
+            self.get_fast_charge_current_limit()?
+        ));
+        text.push_str(&format!(
+            "Charger target voltage: {}mV\n",
+            self.get_charge_target_voltage()?
+        ));
+        text.push_str(&format!(
+            "Input curr. limit: {}mA\n",
+            self.get_input_current_limit()?
+        ));
         text.push_str(&format!("USB voltage: {}mV\n", self.get_vbus_voltage()?));
         text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage()?));
 

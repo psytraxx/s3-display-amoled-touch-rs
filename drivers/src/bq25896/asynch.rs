@@ -88,7 +88,10 @@ where
     ///
     /// # Arguments
     /// * `milliampere` - Current limit in mA
-    pub async fn set_input_current_limit(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
+    pub async fn set_input_current_limit(
+        &mut self,
+        milliampere: u16,
+    ) -> Result<(), PmuSensorError> {
         // Validate input is multiple of step size
         if !milliampere.is_multiple_of(IN_CURRENT_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid50);
@@ -358,7 +361,10 @@ where
     ///
     /// # Arguments
     /// * `millivolt` - Power down voltage in mV
-    pub async fn set_sys_power_down_voltage(&mut self, millivolt: u16) -> Result<(), PmuSensorError> {
+    pub async fn set_sys_power_down_voltage(
+        &mut self,
+        millivolt: u16,
+    ) -> Result<(), PmuSensorError> {
         if !millivolt.is_multiple_of(SYS_VOL_STEPS) {
             return Err(PmuSensorError::VoltageStepInvalid100);
         }
@@ -492,7 +498,10 @@ where
     ///
     /// # Arguments
     /// * `milliampere` - Termination current in mA
-    pub async fn set_termination_current(&mut self, milliampere: u16) -> Result<(), PmuSensorError> {
+    pub async fn set_termination_current(
+        &mut self,
+        milliampere: u16,
+    ) -> Result<(), PmuSensorError> {
         // Validate step size
         if !milliampere.is_multiple_of(TERM_CHG_CUR_STEP) {
             return Err(PmuSensorError::CurrentStepInvalid64);
@@ -530,7 +539,10 @@ where
     ///
     /// # Arguments
     /// * `target_voltage` - Charge target voltage in mV
-    pub async fn set_charge_target_voltage(&mut self, target_voltage: u16) -> Result<(), PmuSensorError> {
+    pub async fn set_charge_target_voltage(
+        &mut self,
+        target_voltage: u16,
+    ) -> Result<(), PmuSensorError> {
         // Check if voltage is multiple of step size
         if !target_voltage.is_multiple_of(CHG_VOL_STEP) {
             return Err(PmuSensorError::VoltageStepInvalid16);
@@ -679,7 +691,10 @@ where
     ///
     /// # Arguments
     /// * `timer` - Fast charge timer
-    pub async fn set_fast_charge_timer(&mut self, timer: FastChargeTimer) -> Result<(), PmuSensorError> {
+    pub async fn set_fast_charge_timer(
+        &mut self,
+        timer: FastChargeTimer,
+    ) -> Result<(), PmuSensorError> {
         let timer: u8 = timer.into();
         let mut val = self.dev.read_register(0x07).await?;
         // Clear the second and third bits (bit1 & bit2)
@@ -720,7 +735,10 @@ where
     ///
     /// # Arguments
     /// * `milliohm` - IR compensation resistor in mOhm
-    pub async fn set_ir_compensation_resistor(&mut self, milliohm: u16) -> Result<(), PmuSensorError> {
+    pub async fn set_ir_compensation_resistor(
+        &mut self,
+        milliohm: u16,
+    ) -> Result<(), PmuSensorError> {
         if !milliohm.is_multiple_of(BAT_COMP_STEPS) {
             return Err(PmuSensorError::ResistanceStepInvalid20);
         }
@@ -817,7 +835,10 @@ where
     ///
     /// # Arguments
     /// * `use_vreg` - If true, use VREG instead of VREG-200mV during JEITA high temperature
-    pub async fn set_jeita_high_temp_voltage(&mut self, use_vreg: bool) -> Result<(), PmuSensorError> {
+    pub async fn set_jeita_high_temp_voltage(
+        &mut self,
+        use_vreg: bool,
+    ) -> Result<(), PmuSensorError> {
         if use_vreg {
             self.dev.set_register_bit(0x09, 4).await?;
         } else {
@@ -856,7 +877,10 @@ where
     ///
     /// # Arguments
     /// * `enable` - If true, enables current pulse control voltage up
-    pub async fn set_current_pulse_voltage_up(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+    pub async fn set_current_pulse_voltage_up(
+        &mut self,
+        enable: bool,
+    ) -> Result<(), PmuSensorError> {
         if enable {
             self.dev.set_register_bit(0x09, 1).await?;
         } else {
@@ -869,7 +893,10 @@ where
     ///
     /// # Arguments
     /// * `enable` - If true, enables current pulse control voltage down
-    pub async fn set_current_pulse_voltage_down(&mut self, enable: bool) -> Result<(), PmuSensorError> {
+    pub async fn set_current_pulse_voltage_down(
+        &mut self,
+        enable: bool,
+    ) -> Result<(), PmuSensorError> {
         if enable {
             self.dev.set_register_bit(0x09, 0).await?;
         } else {
@@ -1040,7 +1067,10 @@ where
     ///
     /// # Arguments
     /// * `relative` - true for relative (default), false for absolute
-    pub async fn set_vindpm_threshold_method(&mut self, relative: bool) -> Result<(), PmuSensorError> {
+    pub async fn set_vindpm_threshold_method(
+        &mut self,
+        relative: bool,
+    ) -> Result<(), PmuSensorError> {
         if relative {
             self.dev.clear_register_bit(0x0D, 7).await?;
         } else {
@@ -1310,8 +1340,11 @@ where
             false => "No",
         };
 
-        let mut text = format!("CHG state: {}
-", self.get_charge_status().await?);
+        let mut text = format!(
+            "CHG state: {}
+",
+            self.get_charge_status().await?
+        );
 
         text.push_str(&format!("USB PlugIn: {is_vbus_present}\n"));
         text.push_str(&format!("Bus state: {}\n", self.get_bus_status().await?));
@@ -1320,11 +1353,16 @@ where
         let battery_percentage = self.get_battery_percentage().await?;
         text.push_str(&format!(
             "Battery: {}mV ({}%)\n",
-            battery_voltage,
-            battery_percentage,
+            battery_voltage, battery_percentage,
         ));
-        text.push_str(&format!("Charge current: {}mA\n", self.get_charge_current().await?));
-        text.push_str(&format!("Temperature: {}°C\n", self.get_temperature().await?));
+        text.push_str(&format!(
+            "Charge current: {}mA\n",
+            self.get_charge_current().await?
+        ));
+        text.push_str(&format!(
+            "Temperature: {}°C\n",
+            self.get_temperature().await?
+        ));
         text.push_str(&format!(
             "Charger fast charge curr.: {}mA\n",
             self.get_fast_charge_current_limit().await?,
@@ -1333,9 +1371,18 @@ where
             "Charger target voltage: {}mV\n",
             self.get_charge_target_voltage().await?,
         ));
-        text.push_str(&format!("Input curr. limit: {}mA\n", self.get_input_current_limit().await?));
-        text.push_str(&format!("USB voltage: {}mV\n", self.get_vbus_voltage().await?));
-        text.push_str(&format!("SYS voltage: {}mV\n", self.get_sys_voltage().await?));
+        text.push_str(&format!(
+            "Input curr. limit: {}mA\n",
+            self.get_input_current_limit().await?
+        ));
+        text.push_str(&format!(
+            "USB voltage: {}mV\n",
+            self.get_vbus_voltage().await?
+        ));
+        text.push_str(&format!(
+            "SYS voltage: {}mV\n",
+            self.get_sys_voltage().await?
+        ));
 
         Ok(text)
     }

@@ -15,12 +15,12 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 use alloc::boxed::Box;
 use controller::Controller;
+use core::cell::UnsafeCell;
+use core::sync::atomic::AtomicBool;
 use drivers::bq25896::asynch::BQ25896Async;
 use drivers::cst816x::asynch::CST816xAsync;
 use drivers::cst816x::IrqControl;
 use drivers::ld2410::asynch::LD2410Async;
-use core::cell::UnsafeCell;
-use core::sync::atomic::AtomicBool;
 use embassy_executor::Spawner;
 use embassy_time::Delay;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
@@ -517,13 +517,11 @@ async fn initialize_pmu(i2c_ref_cell: &'static I2cCell<I2c<'static, Async>>) -> 
         .expect("set_fast_charge_current_limit failed");
 
     // Enable ADC for power measurement in the PMU
-    pmu.set_adc_enabled()
-        .await
-        .expect("set_adc_enabled failed");
+    pmu.set_adc_enabled().await.expect("set_adc_enabled failed");
 
     info!(
         "Fast charge current limit: {}",
-        pmu.get_fast_charge_current_limit() 
+        pmu.get_fast_charge_current_limit()
             .await
             .expect("get_fast_charge_current_limit failed")
     );
@@ -563,7 +561,7 @@ async fn initialize_pmu(i2c_ref_cell: &'static I2cCell<I2c<'static, Async>>) -> 
 
     info!(
         "Power down voltage: {}mV",
-        pmu.get_sys_power_down_voltage() 
+        pmu.get_sys_power_down_voltage()
             .await
             .expect("get_sys_power_down_voltage failed")
     );
