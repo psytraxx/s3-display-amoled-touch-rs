@@ -162,16 +162,16 @@ impl GestureState {
                             if dx > dy {
                                 // Horizontal
                                 if data.x > self.start_x {
-                                    data.gesture = Gesture::SwipeRight;
-                                } else {
                                     data.gesture = Gesture::SwipeLeft;
+                                } else {
+                                    data.gesture = Gesture::SwipeRight;
                                 }
                             } else {
                                 // Vertical
                                 if data.y > self.start_y {
-                                    data.gesture = Gesture::SwipeDown;
-                                } else {
                                     data.gesture = Gesture::SwipeUp;
+                                } else {
+                                    data.gesture = Gesture::SwipeDown;
                                 }
                             }
                         } else if dx < config.max_click_dist as i32

@@ -58,7 +58,7 @@ async fn process_touch(
     }
     // Read the touch data
     match touch.read_touch().await {
-        Ok(Some(point)) => {
+        Ok(point) => {
             if point.gesture != Gesture::None {
                 info!("Gesture detected: {:?}", point.gesture);
             }
@@ -118,7 +118,6 @@ async fn process_touch(
                     .expect("Event dispatch failed");
             }
         }
-        Ok(None) => {}
         Err(e) => {
             error!("Touch read error: {e:?}");
         }
