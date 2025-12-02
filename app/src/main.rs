@@ -245,7 +245,12 @@ pub type Charger = BQ25896Async<AsyncAtomicDevice<'static, I2c<'static, Async>>>
 
 pub type RadarSensor = LD2410Async<Uart<'static, Async>, Delay>;
 
-pub type Touchpad = CST816xAsync<AsyncAtomicDevice<'static, I2c<'static, Async>>, Input<'static>>;
+pub type Touchpad = CST816xAsync<
+    AsyncAtomicDevice<'static, I2c<'static, Async>>,
+    Input<'static>,
+    Output<'static>,
+    Delay,
+>;
 
 /// Main entry point for the application
 #[esp_rtos::main]
@@ -353,7 +358,8 @@ async fn initialize_touchpad(
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
     let i2c_device = AsyncAtomicDevice::new(i2c);
-    let mut touchpad = CST816xAsync::new(i2c_device, touch_pin);
+    let mut touchpad = CST816xAsync::new(i2c_device, touch_pin, None, Delay);
+    touchpad.begin().await.expect("Failed to begin touchpad");
     let irq_config = IrqControl::EN_TOUCH | IrqControl::EN_CHANGE | IrqControl::EN_MOTION;
     touchpad
         .set_irq_control(&irq_config)

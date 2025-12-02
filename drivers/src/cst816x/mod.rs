@@ -117,6 +117,80 @@ pub enum TouchSensorError {
     InvalidLongPressTime,
     I2CError,
     PinError,
+    ResetError,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SoftwareGestureConfig {
+    pub min_swipe_dist: u16,
+    pub max_click_dist: u16,
+}
+
+impl Default for SoftwareGestureConfig {
+    fn default() -> Self {
+        Self {
+            min_swipe_dist: 40,
+            max_click_dist: 10,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct GestureState {
+    start_x: u16,
+    start_y: u16,
+    active: bool,
+}
+
+impl GestureState {
+    pub fn process(&mut self, data: &mut TouchData, config: &SoftwareGestureConfig) {
+        match data.event {
+            Event::Down => {
+                self.start_x = data.x;
+                self.start_y = data.y;
+                self.active = true;
+            }
+            Event::Up => {
+                if self.active {
+                    self.active = false;
+                    // Only try to detect if hardware didn't report a gesture
+                    if data.gesture == Gesture::None {
+                        let dx = (data.x as i32 - self.start_x as i32).abs();
+                        let dy = (data.y as i32 - self.start_y as i32).abs();
+
+                        if dx > config.min_swipe_dist as i32 || dy > config.min_swipe_dist as i32 {
+                            if dx > dy {
+                                // Horizontal
+                                if data.x > self.start_x {
+                                    data.gesture = Gesture::SwipeRight;
+                                } else {
+                                    data.gesture = Gesture::SwipeLeft;
+                                }
+                            } else {
+                                // Vertical
+                                if data.y > self.start_y {
+                                    data.gesture = Gesture::SwipeDown;
+                                } else {
+                                    data.gesture = Gesture::SwipeUp;
+                                }
+                            }
+                        } else if dx < config.max_click_dist as i32
+                            && dy < config.max_click_dist as i32
+                        {
+                            data.gesture = Gesture::SingleClick;
+                        }
+                    }
+                }
+            }
+            Event::Contact => {
+                // Could track path here if needed
+            }
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.active = false;
+    }
 }
 
 impl<E> From<E> for TouchSensorError
