@@ -68,8 +68,9 @@ impl<'a> Controller<'a> {
                 }
                 Err(e) => {
                     error!("Failed to get PMU info: {e:?}");
-                    self.app_window
-                        .set_pmu_details("Error: Failed to read PMU data\nCheck I2C connection".into());
+                    self.app_window.set_pmu_details(
+                        "Error: Failed to read PMU data\nCheck I2C connection".into(),
+                    );
                     return Err(());
                 }
             },

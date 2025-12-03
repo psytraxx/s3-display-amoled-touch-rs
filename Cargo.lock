@@ -94,6 +94,7 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "drivers",
+ "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-sync 0.7.2",
