@@ -114,9 +114,7 @@ async fn main(spawner: Spawner) {
     app_window.show().expect("UI show failed");
 
     // Initialize the PMU for battery charging control
-    let mut pmu = {
-        initialize_pmu(I2cDevice::new(i2c_bus)).await
-    };
+    let mut pmu = { initialize_pmu(I2cDevice::new(i2c_bus)).await };
     // Populate initial battery percentage on the main screen
     if let Ok(percentage) = pmu.get_battery_percentage().await {
         app_window.set_battery_percentage(percentage as i32);
