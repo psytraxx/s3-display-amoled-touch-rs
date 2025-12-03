@@ -320,9 +320,13 @@ async fn main(spawner: Spawner) {
 
     // Initialize the PMU for battery charging control
     let mut pmu = initialize_pmu(i2c_bus).await;
-    // Populate initial PMU info into the UI text area (scrollable Flickable in Slint)
-    if let Ok(info) = pmu.get_info().await {
-        app_window.set_text(info.into());
+    // Populate initial battery percentage on the main screen
+    if let Ok(percentage) = pmu.get_battery_percentage().await {
+        app_window.set_battery_percentage(percentage as i32);
+    }
+    // Set initial charging state
+    if let Ok(charging_enabled) = pmu.is_charging().await {
+        app_window.set_charging(charging_enabled);
     }
 
     // Start the main event loop in the controller with the UI and PMU

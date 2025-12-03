@@ -1,7 +1,13 @@
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::Timer;
 use log::info;
 
 use crate::RadarSensor;
+use drivers::ld2410::RadarData;
+
+pub type RadarDataChannelType = Channel<CriticalSectionRawMutex, RadarData, 2>;
+
+pub static RADAR_DATA: RadarDataChannelType = Channel::new();
 
 #[embassy_executor::task()]
 pub async fn radar_task(mut radar: RadarSensor) {
@@ -32,6 +38,8 @@ pub async fn radar_task(mut radar: RadarSensor) {
     loop {
         if let Ok(Some(event)) = radar.get_radar_data().await {
             info!("Radar data: {event:?}");
+            // Send radar data to UI (non-blocking)
+            let _ = RADAR_DATA.try_send(event);
         }
         Timer::after_millis(200).await
     }
