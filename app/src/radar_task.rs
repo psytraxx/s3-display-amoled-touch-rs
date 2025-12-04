@@ -40,6 +40,6 @@ pub async fn radar_task(mut radar: RadarSensor) {
             // Send radar data to UI (non-blocking)
             let _ = RADAR_DATA.try_send(event);
         }
-        Timer::after_millis(200).await
+        Timer::after_millis(10).await
     }
 }

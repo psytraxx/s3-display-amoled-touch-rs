@@ -1,6 +1,5 @@
 use core::fmt::Display;
 
-use alloc::string::ToString;
 #[cfg(feature = "defmt")]
 use defmt::Format;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -163,30 +162,21 @@ impl RadarData {
     pub fn get_info(&self) -> alloc::string::String {
         use alloc::format;
 
-        let mut text = "═══ TARGET STATUS ═══\n".to_string();
-        text.push_str(&format!("Status: {}\n\n", self.target_state));
+        let mut text = format!("Status: {}\n\n", self.target_state);
 
         if self.target_state != TargetState::None {
-            text.push_str("═══ DETECTION DATA ═══\n");
-
-            if self.target_state.has_moving() {
-                text.push_str(&format!(
-                    "Moving Target:\n  Distance: {} cm\n  Energy: {}\n\n",
-                    self.movement_target_distance, self.movement_target_energy
-                ));
-            }
-
-            if self.target_state.has_stationary() {
-                text.push_str(&format!(
-                    "Stationary Target:\n  Distance: {} cm\n  Energy: {}\n\n",
-                    self.stationary_target_distance, self.stationary_target_energy
-                ));
-            }
-
+            // Side-by-side layout
+            text.push_str("MOVING      STATIONARY\n");
             text.push_str(&format!(
-                "Detection Distance: {} cm",
-                self.detection_distance
+                "{:>3} cm      {:>3} cm\n",
+                self.movement_target_distance, self.stationary_target_distance
             ));
+            text.push_str(&format!(
+                "E: {:>3}       E: {:>3}\n\n",
+                self.movement_target_energy, self.stationary_target_energy
+            ));
+
+            text.push_str(&format!("Detection: {} cm", self.detection_distance));
         } else {
             text.push_str("No targets detected");
         }

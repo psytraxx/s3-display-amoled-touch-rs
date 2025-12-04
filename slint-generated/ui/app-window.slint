@@ -6,7 +6,7 @@ export component AppWindow inherits Window {
     in-out property <int> battery-percentage: 0;
     in-out property <bool> charging: true;
     in-out property <string> pmu-details: "No data yet\n\nPress refresh in PMU Details screen";
-    in-out property <string> radar-data: "Waiting for radar data...\n\nData updates automatically every 200ms";
+    in-out property <string> radar-data: "Waiting for radar data...\n\nData updates automatically";
     in-out property <int> current-screen: 0; // 0: Main, 1: PMU Details, 2: Radar
 
     // Callbacks
@@ -137,40 +137,20 @@ export component AppWindow inherits Window {
 
                 // Floating refresh button (bottom right)
                 refresh-btn := Rectangle {
-                    width: 60px;
-                    height: 60px;
+                    width: 120px;
+                    height: 50px;
                     x: parent.width - self.width - 12px;
                     y: parent.height - self.height - 12px;
                     background: #2196F3;
-                    border-radius: 30px;
+                    border-radius: 25px;
 
-                    // Simple circular icon
-                    Rectangle {
-                        width: 32px;
-                        height: 32px;
-                        x: 14px;
-                        y: 14px;
-                        border-width: 3px;
-                        border-color: white;
-                        border-radius: 16px;
-                        background: transparent;
-                    }
-
-                    // Top arrow
-                    Rectangle {
-                        width: 3px;
-                        height: 8px;
-                        x: 29px;
-                        y: 10px;
-                        background: white;
-                    }
-
-                    Rectangle {
-                        width: 8px;
-                        height: 3px;
-                        x: 26px;
-                        y: 10px;
-                        background: white;
+                    Text {
+                        text: "Refresh";
+                        font-size: Theme.font-size-small;
+                        font-weight: 700;
+                        color: white;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
 
                     TouchArea {
