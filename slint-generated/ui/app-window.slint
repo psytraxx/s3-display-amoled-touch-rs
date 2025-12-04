@@ -120,21 +120,8 @@ export component AppWindow inherits Window {
                     padding: 8px;
                     spacing: 6px;
 
-                    HorizontalLayout {
-                        height: 50px;
-                        alignment: start;
-
-                        Text {
-                            text: "PMU Details";
-                            font-size: Theme.font-size-standard;
-                            font-weight: 700;
-                            color: #201f1e;
-                            vertical-alignment: center;
-                        }
-                    }
-
                     Flickable {
-                        height: parent.height - 56px;
+                        height: parent.height;
                         interactive: true;
                         viewport-height: pmu-text.preferred-height;
 
@@ -149,15 +136,47 @@ export component AppWindow inherits Window {
                 }
 
                 // Floating refresh button (bottom right)
-                Button {
-                    text: "↻";
-                    primary: true;
+                refresh-btn := Rectangle {
                     width: 60px;
                     height: 60px;
                     x: parent.width - self.width - 12px;
                     y: parent.height - self.height - 12px;
-                    clicked => {
-                        root.request-pmu-update();
+                    background: #2196F3;
+                    border-radius: 30px;
+
+                    // Simple circular icon
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        x: 14px;
+                        y: 14px;
+                        border-width: 3px;
+                        border-color: white;
+                        border-radius: 16px;
+                        background: transparent;
+                    }
+
+                    // Top arrow
+                    Rectangle {
+                        width: 3px;
+                        height: 8px;
+                        x: 29px;
+                        y: 10px;
+                        background: white;
+                    }
+
+                    Rectangle {
+                        width: 8px;
+                        height: 3px;
+                        x: 26px;
+                        y: 10px;
+                        background: white;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.request-pmu-update();
+                        }
                     }
                 }
             }
@@ -167,21 +186,8 @@ export component AppWindow inherits Window {
                 padding: 8px;
                 spacing: 6px;
 
-                HorizontalLayout {
-                    height: 50px;
-                    alignment: start;
-
-                    Text {
-                        text: "Radar Data (Live)";
-                        font-size: Theme.font-size-standard;
-                        font-weight: 700;
-                        color: #201f1e;
-                        vertical-alignment: center;
-                    }
-                }
-
                 Flickable {
-                    height: parent.height - 56px;
+                    height: parent.height;
                     interactive: true;
                     viewport-height: radar-text.preferred-height;
 
