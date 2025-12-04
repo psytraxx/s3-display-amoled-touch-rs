@@ -36,25 +36,9 @@ pub async fn radar_task(mut radar: RadarSensor) {
         info!("Current configuration: {c}");
     }
     loop {
-        // Use a select with timeout to prevent blocking forever if no radar data
-        match embassy_futures::select::select(
-            radar.get_radar_data(),
-            Timer::after_millis(500),
-        )
-        .await
-        {
-            embassy_futures::select::Either::First(result) => {
-                if let Ok(Some(event)) = result {
-                    info!("Radar data: {event:?}");
-                    // Send radar data to UI (non-blocking)
-                    let _ = RADAR_DATA.try_send(event);
-                } else {
-                    info!("Failed to read radar data or invalid frame");
-                }
-            }
-            embassy_futures::select::Either::Second(_) => {
-                info!("Radar data read timeout - no data received");
-            }
+        if let Ok(Some(event)) = radar.get_radar_data().await {
+            // Send radar data to UI (non-blocking)
+            let _ = RADAR_DATA.try_send(event);
         }
         Timer::after_millis(200).await
     }
