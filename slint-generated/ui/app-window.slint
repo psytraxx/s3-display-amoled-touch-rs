@@ -1,73 +1,183 @@
-import { HorizontalBox, VerticalBox, Button, CheckBox, ScrollView } from "std-widgets.slint";
-import { Theme, Toggle } from "common.slint";
+import { HorizontalBox, VerticalBox, Button } from "std-widgets.slint";
+import { Theme, Toggle, NavButton } from "common.slint";
 
 export component AppWindow inherits Window {
-    in-out property <string> text: "Please touch the button \nto update the PMU reading";
+    // Properties
+    in-out property <int> battery-percentage: 0;
     in-out property <bool> charging: true;
-    in property <image> status-icon: @image-url("../assets/battery.png");
+    in-out property <string> pmu-details: "No data yet\n\nPress refresh in PMU Details screen";
+    in-out property <string> radar-data: "Waiting for radar data...\n\nData updates automatically";
+    in-out property <int> current-screen: 0; // 0: Main, 1: PMU Details, 2: Radar
+
+    // Callbacks
+    callback toggle-charger(bool);
+    callback request-pmu-update();
 
     width: 536px;
     height: 240px;
     default-font-size: Theme.font-size-standard;
-    callback request-update();
-    callback toggle-charger(bool);
+    background: Theme.page-background-color;
 
     HorizontalLayout {
+        padding: 0px;
+        spacing: 0px;
 
-        Rectangle {
-            width: parent.width * 0.75;
-            height: parent.height;
-            background: white;
+        // Left Navigation Sidebar
+        nav-sidebar := Rectangle {
+            width: 100px;
+            background: #F5F5F5;
+            border-color: #E0E0E0;
+            border-width: 1px;
 
-            Flickable {
-                width: parent.width;
-                height: parent.height;
-                interactive: true;
-                viewport-width: self.width;
-                viewport-height: text-element.preferred-height;
+            VerticalLayout {
+                padding: 6px;
+                spacing: 6px;
+                alignment: start;
 
-                text-element := Text {
-                    text: root.text;
-                    font-size: Theme.font-size-small;
-                    width: parent.viewport-width;
-                    wrap: TextWrap.word-wrap;
-                    horizontal-alignment: left;
-                    vertical-alignment: top;
+                NavButton {
+                    label: "Main";
+                    active: root.current-screen == 0;
+                    clicked => {
+                        root.current-screen = 0;
+                    }
+                }
+
+                NavButton {
+                    label: "PMU";
+                    active: root.current-screen == 1;
+                    clicked => {
+                        root.current-screen = 1;
+                    }
+                }
+
+                NavButton {
+                    label: "Radar";
+                    active: root.current-screen == 2;
+                    clicked => {
+                        root.current-screen = 2;
+                    }
                 }
             }
         }
 
-        VerticalLayout {
-            width: parent.width * 0.25;
-            height: parent.height;
-            alignment: LayoutAlignment.start;
-            padding: 10px;
+        // Main content area
+        content-area := Rectangle {
+            width: parent.width - 100px;
+            background: white;
 
-            Image {
-                source: root.status-icon;
-                width: 40px;
-                height: 40px;
-            }
+            // Main Screen (Battery & Charger)
+            if root.current-screen == 0: HorizontalLayout {
+                padding: 10px;
+                spacing: 15px;
 
-            Button {
-                primary: true;
-                text: "Update";
-                width: 120px;
-                height: 80px;
-                clicked => {
-                    root.request-update();
+                // Battery Percentage Display (Left Side)
+                VerticalLayout {
+                    width: 60%;
+                    spacing: 5px;
+                    alignment: center;
+
+                    Text {
+                        text: root.battery-percentage + "%";
+                        font-size: Theme.font-size-huge;
+                        font-weight: 900;
+                        color: root.battery-percentage < 20 ? #F44336 : (root.battery-percentage < 50 ? #FF9800 : #4CAF50);
+                        horizontal-alignment: center;
+                    }
+
+                    Text {
+                        text: "Battery";
+                        font-size: Theme.font-size-standard;
+                        color: #666666;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                // Charger Toggle Section (Right Side)
+                VerticalLayout {
+                    width: 40%;
+                    spacing: 8px;
+                    alignment: center;
+
+                    Text {
+                        text: "Charger";
+                        font-size: Theme.font-size-standard;
+                        color: #201f1e;
+                        horizontal-alignment: center;
+                    }
+
+                    Toggle {
+                        on: root.charging;
+                        clicked => {
+                            root.toggle-charger(!self.on);
+                        }
+                    }
                 }
             }
 
-            Text {
-                text: "Charging";
-                font-size: Theme.font-size-standard;
+            // PMU Details Screen
+            if root.current-screen == 1: Rectangle {
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+
+                    Flickable {
+                        height: parent.height;
+                        interactive: true;
+                        viewport-height: pmu-text.preferred-height;
+
+                        pmu-text := Text {
+                            text: root.pmu-details;
+                            font-size: Theme.font-size-small;
+                            width: parent.viewport-width;
+                            wrap: word-wrap;
+                            color: #201f1e;
+                        }
+                    }
+                }
+
+                // Floating refresh button (bottom right)
+                refresh-btn := Rectangle {
+                    width: 120px;
+                    height: 50px;
+                    x: parent.width - self.width - 12px;
+                    y: parent.height - self.height - 12px;
+                    background: #2196F3;
+                    border-radius: 25px;
+
+                    Text {
+                        text: "Refresh";
+                        font-size: Theme.font-size-small;
+                        font-weight: 700;
+                        color: white;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.request-pmu-update();
+                        }
+                    }
+                }
             }
 
-            Toggle {
-                on: root.charging;
-                clicked => {
-                    root.toggle-charger(!self.on);
+            // Radar Screen
+            if root.current-screen == 2: VerticalLayout {
+                padding: 8px;
+                spacing: 6px;
+
+                Flickable {
+                    height: parent.height;
+                    interactive: true;
+                    viewport-height: radar-text.preferred-height;
+
+                    radar-text := Text {
+                        text: root.radar-data;
+                        font-size: Theme.font-size-small;
+                        width: parent.viewport-width;
+                        wrap: word-wrap;
+                        color: #201f1e;
+                    }
                 }
             }
         }

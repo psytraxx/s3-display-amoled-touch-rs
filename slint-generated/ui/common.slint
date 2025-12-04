@@ -9,50 +9,84 @@ global Palette {
 export global Theme {
     out property <color> page-background-color: Palette.white;
     out property <color> text-foreground-color: Palette.black;
-    out property <length> font-size-standard: 22px;
-    out property <length> font-size-small: 18px;
+    out property <length> font-size-huge: 84px;
+    out property <length> font-size-large: 42px;
+    out property <length> font-size-standard: 26px;
+    out property <length> font-size-small: 22px;
+    out property <length> button-min-height: 80px;
+    out property <length> touch-area-min: 60px;
 }
 
 export component Toggle inherits Rectangle {
     callback clicked();
     in-out property <bool> on;
-    width: 100px;
-    height: 40px;
+    width: 140px;
+    height: 70px;
 
     Rectangle {
-        width: 100px;
-        height: 40px;
-        background: on ? blue : gray;
+        width: 140px;
+        height: 70px;
+        background: on ? #4CAF50 : #757575;
         animate background {
-            duration: 100ms;
-            easing: ease;
+            duration: 150ms;
+            easing: ease-in-out;
         }
-        border-radius: 20px;
+        border-radius: 35px;
 
         Text {
-            text: on ? "On" : "Off";
-            x: on ? 8px : parent.width - 50px;
+            text: on ? "ON" : "OFF";
+            x: on ? 12px : parent.width - 62px;
             color: white;
             font-size: Theme.font-size-standard;
+            font-weight: 700;
         }
 
         Rectangle {
-            width: parent.height - 4px;
-            height: parent.height - 4px;
-            x: on ? parent.width - (parent.height - 2px) : 2px;
+            width: parent.height - 8px;
+            height: parent.height - 8px;
+            x: on ? parent.width - (parent.height - 4px) : 4px;
             animate x {
-                duration: 100ms;
-                easing: ease;
+                duration: 150ms;
+                easing: ease-in-out;
             }
-            y: 2px;
+            y: 4px;
             background: white;
-            border-radius: (parent.height - 4px) / 2;
+            border-radius: (parent.height - 8px) / 2;
         }
     }
 
     TouchArea {
         clicked => {
             on = !on;
+            root.clicked();
+        }
+    }
+}
+
+export component NavButton inherits Rectangle {
+    callback clicked();
+    in-out property <string> label: "Button";
+    in-out property <bool> active: false;
+
+    height: 52px;
+    background: active ? #2196F3 : #E0E0E0;
+    border-radius: 6px;
+
+    animate background {
+        duration: 100ms;
+    }
+
+    Text {
+        text: root.label;
+        color: active ? white : #201f1e;
+        font-size: Theme.font-size-standard;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        clicked => {
             root.clicked();
         }
     }

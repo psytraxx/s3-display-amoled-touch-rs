@@ -157,6 +157,32 @@ impl RadarData {
             && self.stationary_target_distance > 0
             && self.stationary_target_energy > 0
     }
+
+    /// Format radar data as a human-readable string
+    pub fn get_info(&self) -> alloc::string::String {
+        use alloc::format;
+
+        let mut text = format!("Status: {}\n\n", self.target_state);
+
+        if self.target_state != TargetState::None {
+            // Side-by-side layout
+            text.push_str("MOVING      STATIONARY\n");
+            text.push_str(&format!(
+                "{:>3} cm      {:>3} cm\n",
+                self.movement_target_distance, self.stationary_target_distance
+            ));
+            text.push_str(&format!(
+                "E: {:>3}       E: {:>3}\n\n",
+                self.movement_target_energy, self.stationary_target_energy
+            ));
+
+            text.push_str(&format!("Detection: {} cm", self.detection_distance));
+        } else {
+            text.push_str("No targets detected");
+        }
+
+        text
+    }
 }
 
 #[cfg(feature = "defmt")]
