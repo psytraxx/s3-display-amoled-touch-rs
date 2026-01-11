@@ -8,6 +8,7 @@ use embassy_time::Delay;
 use esp_hal::peripherals::{GPIO43, GPIO44, UART0};
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
 use esp_hal::Async;
+use log::info;
 
 /// Type alias for the LD2410 radar sensor driver instance
 pub type RadarSensor = LD2410Async<Uart<'static, Async>, Delay>;
@@ -37,6 +38,12 @@ pub fn initialize_radar(
     rx_pin: GPIO44<'static>,
     tx_pin: GPIO43<'static>,
 ) -> RadarSensor {
+    info!("Initializing LD2410 radar sensor...");
+    info!("  UART: UART0");
+    info!("  RX Pin: GPIO44");
+    info!("  TX Pin: GPIO43");
+    info!("  Baud Rate: 256000");
+
     // Set UART configuration including baud rate, parity, and stop bits
     let config = UartConfig::default()
         .with_baudrate(256000)
@@ -45,10 +52,15 @@ pub fn initialize_radar(
 
     // Initialize the UART instance for the radar module communication
     let uart0 = Uart::new(uart1, config).expect("Failed to initialize UART0");
+    info!("UART0 initialized successfully");
 
     // Associate the UART with its designated RX and TX GPIO pins
     let uart0 = uart0.with_rx(rx_pin).with_tx(tx_pin).into_async();
+    info!("UART0 configured with RX/TX pins and async mode");
 
     // Construct the radar driver with the configured UART and a delay provider
-    LD2410Async::new(uart0, Delay)
+    let radar = LD2410Async::new(uart0, Delay);
+    info!("LD2410 radar driver created successfully");
+
+    radar
 }

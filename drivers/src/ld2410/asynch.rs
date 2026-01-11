@@ -33,40 +33,75 @@ where
     /// Reads a data frame (header, length, payload, tail) and decodes it.
     pub async fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
         let mut header = [0u8; 4];
-        self.uart
-            .read_exact(&mut header)
-            .await
-            .map_err(|_| LD2410Error::IoError)?;
+        self.uart.read_exact(&mut header).await.map_err(|_| {
+            #[cfg(feature = "log-04")]
+            log::error!("Failed to read header from UART");
+            LD2410Error::IoError
+        })?;
+
         if header != DATA_HEADER {
+            #[cfg(feature = "log-04")]
+            log::warn!(
+                "Invalid header received: {:02X?} (expected: {:02X?})",
+                header,
+                DATA_HEADER
+            );
             return Err(LD2410Error::InvalidHeader);
         }
 
         let mut len_buf = [0u8; 2];
-        self.uart
-            .read_exact(&mut len_buf)
-            .await
-            .map_err(|_| LD2410Error::IoError)?;
+        self.uart.read_exact(&mut len_buf).await.map_err(|_| {
+            #[cfg(feature = "log-04")]
+            log::error!("Failed to read length from UART");
+            LD2410Error::IoError
+        })?;
         let len = u16::from_le_bytes(len_buf) as usize;
 
+        #[cfg(feature = "log-04")]
+        log::trace!("Reading radar frame with payload length: {}", len);
+
         if len > self.buf.len() {
+            #[cfg(feature = "log-04")]
+            log::error!("Payload too large: {} (max: {})", len, self.buf.len());
             return Err(LD2410Error::TooLarge(len));
         }
 
         self.uart
             .read_exact(&mut self.buf[..len])
             .await
-            .map_err(|_| LD2410Error::IoError)?;
+            .map_err(|_| {
+                #[cfg(feature = "log-04")]
+                log::error!("Failed to read payload ({} bytes) from UART", len);
+                LD2410Error::IoError
+            })?;
 
         let mut tail = [0u8; 4];
-        self.uart
-            .read_exact(&mut tail)
-            .await
-            .map_err(|_| LD2410Error::IoError)?;
+        self.uart.read_exact(&mut tail).await.map_err(|_| {
+            #[cfg(feature = "log-04")]
+            log::error!("Failed to read tail from UART");
+            LD2410Error::IoError
+        })?;
+
         if tail != DATA_TAIL {
+            #[cfg(feature = "log-04")]
+            log::warn!(
+                "Invalid tail received: {:02X?} (expected: {:02X?})",
+                tail,
+                DATA_TAIL
+            );
             return Err(LD2410Error::InvalidTail);
         }
 
-        Ok(self.decode_data_frame(&self.buf[..len]))
+        let result = self.decode_data_frame(&self.buf[..len]);
+        #[cfg(feature = "log-04")]
+        if result.is_none() {
+            log::warn!(
+                "Failed to decode data frame. Payload: {:02X?}",
+                &self.buf[..len]
+            );
+        }
+
+        Ok(result)
     }
 
     pub async fn get_firmware_version(&mut self) -> Result<Option<FirmwareVersion>, LD2410Error> {
@@ -229,8 +264,39 @@ where
     fn decode_data_frame(&self, buf: &[u8]) -> Option<RadarData> {
         // we receive 13 bytes of data - first byte is data value byte
         // second byte is the head and 11 and 12 tail and check
-        if buf.len() < 13 || buf[0] != 0x02 || buf[1] != 0xAA || buf[11] != 0x55 || buf[12] != 0x00
-        {
+        if buf.len() < 13 {
+            #[cfg(feature = "log-04")]
+            log::warn!("Data frame too short: {} bytes (expected 13)", buf.len());
+            return None;
+        }
+
+        if buf[0] != 0x02 {
+            #[cfg(feature = "log-04")]
+            log::warn!("Invalid data frame type: 0x{:02X} (expected 0x02)", buf[0]);
+            return None;
+        }
+
+        if buf[1] != 0xAA {
+            #[cfg(feature = "log-04")]
+            log::warn!("Invalid data frame head: 0x{:02X} (expected 0xAA)", buf[1]);
+            return None;
+        }
+
+        if buf[11] != 0x55 {
+            #[cfg(feature = "log-04")]
+            log::warn!(
+                "Invalid data frame tail marker: 0x{:02X} (expected 0x55)",
+                buf[11]
+            );
+            return None;
+        }
+
+        if buf[12] != 0x00 {
+            #[cfg(feature = "log-04")]
+            log::warn!(
+                "Invalid data frame check byte: 0x{:02X} (expected 0x00)",
+                buf[12]
+            );
             return None;
         }
 
@@ -241,8 +307,22 @@ where
         let stationary_target_energy = buf[8];
         let detection_distance = u16::from_le_bytes(buf[9..11].try_into().ok()?);
 
+        let target_state = match TargetState::try_from(target_status) {
+            Ok(state) => state,
+            Err(_) => {
+                #[cfg(feature = "log-04")]
+                log::warn!("Invalid target status: 0x{:02X}", target_status);
+                return None;
+            }
+        };
+
+        #[cfg(feature = "log-04")]
+        log::trace!("Decoded radar data: state={:?}, mov_dist={}, mov_energy={}, stat_dist={}, stat_energy={}, det_dist={}",
+                   target_state, movement_target_distance, movement_target_energy,
+                   stationary_target_distance, stationary_target_energy, detection_distance);
+
         Some(RadarData {
-            target_state: TargetState::try_from(target_status).expect("Invalid target state"),
+            target_state,
             movement_target_distance,
             stationary_target_distance,
             detection_distance,
@@ -296,18 +376,24 @@ where
     }
 
     async fn execute_command(&mut self, command: Command) -> Result<Option<Vec<u8>>, LD2410Error> {
-        self.uart
-            .write_all(&CMD_HEADER)
-            .await
-            .map_err(|_| LD2410Error::IoError)?;
-        self.uart
-            .write_all(command.payload())
-            .await
-            .map_err(|_| LD2410Error::IoError)?;
-        self.uart
-            .write_all(&CMD_TAIL)
-            .await
-            .map_err(|_| LD2410Error::IoError)?;
+        #[cfg(feature = "log-04")]
+        log::debug!("Executing command: {:?}", command);
+
+        self.uart.write_all(&CMD_HEADER).await.map_err(|_| {
+            #[cfg(feature = "log-04")]
+            log::error!("Failed to write command header");
+            LD2410Error::IoError
+        })?;
+        self.uart.write_all(command.payload()).await.map_err(|_| {
+            #[cfg(feature = "log-04")]
+            log::error!("Failed to write command payload");
+            LD2410Error::IoError
+        })?;
+        self.uart.write_all(&CMD_TAIL).await.map_err(|_| {
+            #[cfg(feature = "log-04")]
+            log::error!("Failed to write command tail");
+            LD2410Error::IoError
+        })?;
 
         let expected_ack = command.expected_ack();
         let mut elapsed_ms = 0;
@@ -315,9 +401,18 @@ where
             self.delay.delay_ms(self.config.delay_ms).await;
             elapsed_ms += self.config.delay_ms;
             if let Ok(Some(data)) = self.read_command_frame(expected_ack).await {
+                #[cfg(feature = "log-04")]
+                log::debug!(
+                    "Command {:?} successful, received {} bytes",
+                    command,
+                    data.len()
+                );
                 return Ok(Some(data.to_vec()));
             }
         }
+
+        #[cfg(feature = "log-04")]
+        log::warn!("Command {:?} timed out after {}ms", command, elapsed_ms);
         Ok(None)
     }
 

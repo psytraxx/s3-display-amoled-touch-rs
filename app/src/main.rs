@@ -101,13 +101,17 @@ async fn main(spawner: Spawner) {
     );
 
     // Launch the GUI render task asynchronously
-    spawner.spawn(render_task(window, display, touchpad)).ok();
+    spawner
+        .spawn(render_task(window, display, touchpad))
+        .expect("Unable to spawn render task");
 
     // Initialize the radar (LD2410) sensor interface via UART
     let radar = initialize_radar(peripherals.UART0, peripherals.GPIO44, peripherals.GPIO43);
 
     // Launch the radar task asynchronously
-    spawner.spawn(radar_task(radar)).ok();
+    spawner
+        .spawn(radar_task(radar))
+        .expect("Unable to spawn radar task");
 
     // Create and show the application window UI
     let app_window = AppWindow::new().expect("UI init failed");
