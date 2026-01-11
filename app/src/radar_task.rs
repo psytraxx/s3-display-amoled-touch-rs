@@ -95,7 +95,7 @@ pub async fn radar_task(mut radar: RadarSensor) {
                 }
 
                 // Log periodic stats
-                if success_count % 100 == 0 {
+                if success_count.is_multiple_of(100) {
                     info!(
                         "Radar stats - reads: {}, successes: {}, none: {}, errors: {}",
                         read_count, success_count, none_count, error_count
@@ -113,7 +113,7 @@ pub async fn radar_task(mut radar: RadarSensor) {
                 error!("Radar error (count: {}): {:?}", error_count, e);
 
                 // If errors are too frequent, log stats
-                if error_count % 10 == 0 {
+                if error_count.is_multiple_of(10) {
                     error!(
                         "Radar error stats - reads: {}, successes: {}, none: {}, errors: {}",
                         read_count, success_count, none_count, error_count
