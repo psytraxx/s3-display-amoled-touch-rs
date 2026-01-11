@@ -1,0 +1,22 @@
+#!/bin/bash
+# Pre-push hook to run cargo fmt and cargo clippy
+
+echo "Running cargo fmt check..."
+cargo fmt --all -- --check
+if [ $? -ne 0 ]; then
+    echo "❌ cargo fmt check failed. Please run 'cargo fmt --all' to fix formatting."
+    exit 1
+fi
+echo "✅ cargo fmt check passed"
+
+echo ""
+echo "Running cargo clippy..."
+cargo clippy --all-features -- -D warnings
+if [ $? -ne 0 ]; then
+    echo "❌ cargo clippy failed. Please fix the warnings above."
+    exit 1
+fi
+echo "✅ cargo clippy passed"
+
+echo ""
+echo "All checks passed! Proceeding with push..."
