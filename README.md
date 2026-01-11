@@ -1,39 +1,26 @@
 # T-Display-S3 AMOLED Plus
 
-This repository contains the Rust example application for the LilyGo T-Display-S3 AMOLED Plus development board. It integrates the display driver and system-level functionality to showcase how to build and deploy applications using the ESP32-S3 microcontroller with the onboard AMOLED display, touch controller, and power management.
+Rust application for the LilyGo T-Display-S3 AMOLED Plus development board featuring the ESP32-S3 microcontroller with integrated AMOLED display, capacitive touch, 24GHz radar sensor, and power management.
 
-## Overview
+## Features
 
-The project demonstrates:
+- **Display**: RM67162 AMOLED controller (536×240, RGB565)
+- **Touch**: CST816S capacitive touch with gesture support
+- **Radar**: HLK-LD2410 24GHz human presence sensor
+- **Power**: BQ25896 battery charger and PMU
+- **UI**: Slint-based embedded GUI with async rendering
 
-- High-performance display control using the RM67162 AMOLED controller.
-- Touch input handling via the CST816S touch controller.
-- Power management monitoring with the BQ25896 PMU.
-- Application-level UI components built with Slint for a seamless embedded GUI experience.
-
-For details on the low-level driver implementations, please refer to the corresponding driver documentation.
-
-## Building and Flashing
-
-1. Build the project:
+## Quick Start
 
 ```bash
+# Build and flash to device
 ./scripts/build.sh
-```
-
-2. Flash the firmware to your device:
-
-```bash
 ./scripts/flash.sh
 ```
 
-## Generating Documentation
+## Development
 
-Generate the project documentation with the following command:
-
-```bash
-cargo doc -p app --no-deps --open
-```
+For detailed build instructions, architecture documentation, and development guidelines, see [CLAUDE.md](./CLAUDE.md).
 
 ## Contributing
 
