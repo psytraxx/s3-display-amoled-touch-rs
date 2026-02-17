@@ -22,10 +22,9 @@ use embassy_sync::mutex::Mutex;
 use esp_alloc::psram_allocator;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
-use esp_hal::gpio::Pin;
-use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_hal::gpio::{AnyPin, Level, Output, OutputConfig, Pin};
 use esp_hal::i2c::master::I2c;
-use esp_hal::peripherals::{GPIO2, GPIO3, I2C0};
+use esp_hal::peripherals::I2C0;
 use esp_hal::Async;
 use log::info;
 use radar_task::radar_task;
@@ -71,7 +70,11 @@ async fn main(spawner: Spawner) {
     info!("PMICEN set high");
 
     // Initialize the I2C bus used by several peripherals
-    let i2c_bus = initialize_i2c(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
+    let i2c_bus = initialize_i2c(
+        peripherals.I2C0,
+        peripherals.GPIO3.degrade(),
+        peripherals.GPIO2.degrade(),
+    );
 
     // Detect the connected SPI board model via I2C communication
     {
@@ -146,8 +149,8 @@ type SharedI2cBus = Mutex<CriticalSectionRawMutex, I2c<'static, Async>>;
 /// Returns a shared I2C bus wrapped in a Mutex for safe concurrent access.
 fn initialize_i2c(
     i2c: I2C0<'static>,
-    sda: GPIO3<'static>,
-    scl: GPIO2<'static>,
+    sda: AnyPin<'static>,
+    scl: AnyPin<'static>,
 ) -> &'static SharedI2cBus {
     // Create a new I2C master instance with default configuration
     let i2c = I2c::new(i2c, esp_hal::i2c::master::Config::default())
