@@ -22,6 +22,7 @@ use embassy_sync::mutex::Mutex;
 use esp_alloc::psram_allocator;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
+use esp_hal::gpio::Pin;
 use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::i2c::master::I2c;
 use esp_hal::peripherals::{GPIO2, GPIO3, I2C0};
@@ -87,15 +88,16 @@ async fn main(spawner: Spawner) {
     slint::platform::set_platform(backend).expect("set_platform failed");
 
     // Initialize the touchpad interface for user interactions
-    let touchpad = { initialize_touchpad(I2cDevice::new(i2c_bus), peripherals.GPIO21).await };
+    let touchpad =
+        { initialize_touchpad(I2cDevice::new(i2c_bus), peripherals.GPIO21.degrade()).await };
 
     // Initialize the display via SPI with DMA support
     let display = initialize_display(
-        peripherals.GPIO17,
-        peripherals.GPIO7,
-        peripherals.GPIO47,
-        peripherals.GPIO18,
-        peripherals.GPIO6,
+        peripherals.GPIO17.degrade(),
+        peripherals.GPIO7.degrade(),
+        peripherals.GPIO47.degrade(),
+        peripherals.GPIO18.degrade(),
+        peripherals.GPIO6.degrade(),
         peripherals.SPI2,
         peripherals.DMA_CH0,
     );
@@ -106,7 +108,11 @@ async fn main(spawner: Spawner) {
         .expect("Unable to spawn render task");
 
     // Initialize the radar (LD2410) sensor interface via UART
-    let radar = initialize_radar(peripherals.UART0, peripherals.GPIO44, peripherals.GPIO43);
+    let radar = initialize_radar(
+        peripherals.UART0,
+        peripherals.GPIO44.degrade(),
+        peripherals.GPIO43.degrade(),
+    );
 
     // Launch the radar task asynchronously
     spawner

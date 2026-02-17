@@ -5,8 +5,8 @@
 
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use esp_hal::dma::DmaTxBuf;
-use esp_hal::gpio::{Level, Output, OutputConfig};
-use esp_hal::peripherals::{DMA_CH0, GPIO17, GPIO18, GPIO47, GPIO6, GPIO7, SPI2};
+use esp_hal::gpio::{AnyPin, Level, Output, OutputConfig};
+use esp_hal::peripherals::{DMA_CH0, SPI2};
 use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
 use esp_hal::time::Rate;
@@ -57,11 +57,11 @@ pub type TouchDisplay = Display<
 ///
 /// Panics if display initialization fails.
 pub fn initialize_display(
-    reset: GPIO17<'static>,
-    dc: GPIO7<'static>,
-    sck: GPIO47<'static>,
-    mosi: GPIO18<'static>,
-    cs: GPIO6<'static>,
+    reset: AnyPin<'static>,
+    dc: AnyPin<'static>,
+    sck: AnyPin<'static>,
+    mosi: AnyPin<'static>,
+    cs: AnyPin<'static>,
     spi: SPI2<'static>,
     dma: DMA_CH0<'static>,
 ) -> TouchDisplay {

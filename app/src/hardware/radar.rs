@@ -5,7 +5,8 @@
 
 use drivers::ld2410::asynch::LD2410Async;
 use embassy_time::Delay;
-use esp_hal::peripherals::{GPIO43, GPIO44, UART0};
+use esp_hal::gpio::AnyPin;
+use esp_hal::peripherals::UART0;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
 use esp_hal::Async;
 use log::info;
@@ -35,8 +36,8 @@ pub type RadarSensor = LD2410Async<Uart<'static, Async>, Delay>;
 /// Panics if UART initialization fails.
 pub fn initialize_radar(
     uart1: UART0<'static>,
-    rx_pin: GPIO44<'static>,
-    tx_pin: GPIO43<'static>,
+    rx_pin: AnyPin<'static>,
+    tx_pin: AnyPin<'static>,
 ) -> RadarSensor {
     info!("Initializing LD2410 radar sensor...");
     info!("  UART: UART0");

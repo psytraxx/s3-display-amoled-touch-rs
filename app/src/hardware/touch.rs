@@ -8,9 +8,8 @@ use drivers::cst816x::IrqControl;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::Delay;
-use esp_hal::gpio::{Input, InputConfig, Output, Pull};
+use esp_hal::gpio::{AnyPin, Input, InputConfig, Output, Pull};
 use esp_hal::i2c::master::I2c;
-use esp_hal::peripherals::GPIO21;
 use esp_hal::Async;
 use log::info;
 
@@ -46,7 +45,7 @@ pub type Touchpad = CST816xAsync<
 /// Panics if any initialization step fails.
 pub async fn initialize_touchpad(
     i2c_device: I2cDevice<'static, CriticalSectionRawMutex, I2c<'static, Async>>,
-    touch: GPIO21<'static>,
+    touch: AnyPin<'static>,
 ) -> Touchpad {
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
