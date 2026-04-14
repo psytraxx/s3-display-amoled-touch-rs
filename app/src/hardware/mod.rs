@@ -14,7 +14,7 @@ pub mod radar;
 pub mod touch;
 
 // Re-export commonly used types and functions for convenience
-pub use display::{initialize_display, TouchDisplay, DISPLAY_HEIGHT, DISPLAY_WIDTH};
-pub use pmu::{initialize_pmu, Charger};
-pub use radar::{initialize_radar, RadarSensor};
-pub use touch::{initialize_touchpad, Touchpad};
+pub use display::{DISPLAY_HEIGHT, DISPLAY_WIDTH, TouchDisplay, initialize_display};
+pub use pmu::{Charger, initialize_pmu};
+pub use radar::{RadarSensor, initialize_radar};
+pub use touch::{Touchpad, initialize_touchpad};

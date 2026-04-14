@@ -663,7 +663,7 @@ where
         let mut val = self.dev.read_register(0x07).await?;
         // Clear the 4th and 5th bits (watchdog timer setting bits)
         val &= 0xCF; // 0xCF = 1100_1111, clears bits 4 & 5
-                     // Map the low two bits of config into bits 4-5
+        // Map the low two bits of config into bits 4-5
         let bits: u8 = (config as u8 & 0x03) << 4;
         self.dev.write_register(&[0x07, val | bits]).await?;
         Ok(())
@@ -699,7 +699,7 @@ where
         let mut val = self.dev.read_register(0x07).await?;
         // Clear the second and third bits (bit1 & bit2)
         val &= 0xF9; // 0xF9 = 1111_1001 (clears bits 1 and 2)
-                     // Set the fast charge timer in bits 1-2
+        // Set the fast charge timer in bits 1-2
         val |= (timer & 0x03) << 1;
         self.dev.write_register(&[0x07, val]).await?;
         Ok(())

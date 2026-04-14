@@ -11,7 +11,7 @@ pub static RADAR_DATA: RadarDataChannelType = Channel::new();
 
 #[embassy_executor::task()]
 pub async fn radar_task(mut radar: RadarSensor) {
-    use embassy_time::{with_timeout, Duration};
+    use embassy_time::{Duration, with_timeout};
 
     info!("Radar task starting...");
     info!("Waiting 100ms for radar sensor to power up...");

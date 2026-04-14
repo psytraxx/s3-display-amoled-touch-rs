@@ -2,8 +2,8 @@ use alloc::rc::Rc;
 use embassy_time::Instant;
 use log::info;
 use slint::{
-    platform::{software_renderer::MinimalSoftwareWindow, Platform, WindowAdapter},
     PlatformError,
+    platform::{Platform, WindowAdapter, software_renderer::MinimalSoftwareWindow},
 };
 
 pub struct Backend {

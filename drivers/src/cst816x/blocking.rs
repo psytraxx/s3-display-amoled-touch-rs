@@ -1,6 +1,6 @@
 use super::{
-    ChipID, Event, Gesture, GestureState, IrqControl, MotionMask, SoftwareGestureConfig, TouchData,
-    TouchSensorError, CST816S_ADDRESS,
+    CST816S_ADDRESS, ChipID, Event, Gesture, GestureState, IrqControl, MotionMask,
+    SoftwareGestureConfig, TouchData, TouchSensorError,
 };
 use crate::BlockingRegisterDevice;
 use embedded_hal::delay::DelayNs;

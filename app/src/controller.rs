@@ -1,10 +1,10 @@
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{Either, select};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use log::{error, info};
 use slint_generated::AppWindow;
 
-use crate::radar_task::RADAR_DATA;
 use crate::Charger;
+use crate::radar_task::RADAR_DATA;
 
 pub struct Controller<'a> {
     app_window: &'a AppWindow,

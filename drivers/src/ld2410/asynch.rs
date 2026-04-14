@@ -317,9 +317,15 @@ where
         };
 
         #[cfg(feature = "log-04")]
-        log::trace!("Decoded radar data: state={:?}, mov_dist={}, mov_energy={}, stat_dist={}, stat_energy={}, det_dist={}",
-                   target_state, movement_target_distance, movement_target_energy,
-                   stationary_target_distance, stationary_target_energy, detection_distance);
+        log::trace!(
+            "Decoded radar data: state={:?}, mov_dist={}, mov_energy={}, stat_dist={}, stat_energy={}, det_dist={}",
+            target_state,
+            movement_target_distance,
+            movement_target_energy,
+            stationary_target_distance,
+            stationary_target_energy,
+            detection_distance
+        );
 
         Some(RadarData {
             target_state,

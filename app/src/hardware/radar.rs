@@ -5,10 +5,10 @@
 
 use drivers::ld2410::asynch::LD2410Async;
 use embassy_time::Delay;
+use esp_hal::Async;
 use esp_hal::gpio::AnyPin;
 use esp_hal::peripherals::UART0;
 use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
-use esp_hal::Async;
 use log::info;
 
 /// Type alias for the LD2410 radar sensor driver instance

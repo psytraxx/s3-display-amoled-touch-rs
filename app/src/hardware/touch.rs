@@ -3,14 +3,14 @@
 //! This module handles the initialization and configuration of the CST816x
 //! capacitive touch controller via I2C interface.
 
-use drivers::cst816x::asynch::CST816xAsync;
 use drivers::cst816x::IrqControl;
+use drivers::cst816x::asynch::CST816xAsync;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::Delay;
+use esp_hal::Async;
 use esp_hal::gpio::{AnyPin, Input, InputConfig, Output, Pull};
 use esp_hal::i2c::master::I2c;
-use esp_hal::Async;
 use log::info;
 
 /// Type alias for the CST816x touchpad driver instance

@@ -3,15 +3,15 @@ use drivers::cst816x::Event;
 use embassy_time::Timer;
 use log::error;
 use slint::{
-    platform::{
-        software_renderer::{MinimalSoftwareWindow, Rgb565Pixel},
-        PointerEventButton, WindowEvent,
-    },
     LogicalPosition,
+    platform::{
+        PointerEventButton, WindowEvent,
+        software_renderer::{MinimalSoftwareWindow, Rgb565Pixel},
+    },
 };
 
 use crate::{
-    display_line_buffer::DisplayLineBuffer, TouchDisplay, Touchpad, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+    DISPLAY_HEIGHT, DISPLAY_WIDTH, TouchDisplay, Touchpad, display_line_buffer::DisplayLineBuffer,
 };
 
 #[embassy_executor::task()]

@@ -6,8 +6,8 @@
 use drivers::bq25896::asynch::BQ25896Async;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use esp_hal::i2c::master::I2c;
 use esp_hal::Async;
+use esp_hal::i2c::master::I2c;
 use log::info;
 
 /// BQ25896 I2C slave address
