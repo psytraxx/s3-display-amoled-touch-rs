@@ -4,14 +4,13 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
-esp-hal = { version = "1.0.0", features = [
+esp-hal = { version = "1.1.0", features = [
     "esp32s3",
     "log-04",
     "unstable",
-    "psram",
 ] }
 
-esp-rtos = { version = "0.2.0", features = [
+esp-rtos = { version = "0.3.0", features = [
     "embassy",
     "esp-alloc",
     "esp-radio",
@@ -19,34 +18,34 @@ esp-rtos = { version = "0.2.0", features = [
     "log-04",
 ] }
 
-esp-bootloader-esp-idf = { version = "0.4.0", features = ["esp32s3", "log-04"] }
+esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32s3", "log-04"] }
 log = "0.4.28"
 embedded-io = "0.7.1"
 embedded-io-async = "0.7.0"
-esp-alloc = "0.9.0"
-esp-backtrace = { version = "0.18.1", features = [
+esp-alloc = "0.10.0"
+esp-backtrace = { version = "0.19.0", features = [
     "esp32s3",
     "panic-handler",
     "println",
 ] }
-esp-println = { version = "0.16.1", features = ["esp32s3", "log-04"] }
-embassy-executor = { version = "0.9.1", features = ["log"] }
-embassy-time = { version = "0.5.0", features = ["log"] }
+esp-println = { version = "0.17.0", features = ["esp32s3", "log-04"] }
+embassy-executor = { version = "0.10.0", features = ["log"] }
+embassy-time = { version = "0.5.1", features = ["log"] }
 mipidsi = { version = "0.10.0" }
 drivers = { path = "../drivers", features = ["log-04", "async"] }
 embedded-graphics-core = { version = "0.4.0", features = [] }
 embedded-hal-bus = { version = "0.3.0", features = ["async"] }
 embedded-hal = { version = "1.0.0", features = [] }
 embedded-hal-async = { version = "1.0.0", features = [] }
-libm = "0.2.15"
-slint = { version = "1.14.1", default-features = false, features = [
+libm = "0.2.16"
+slint = { version = "1.16.1", default-features = false, features = [
     "libm",
     "unsafe-single-threaded",
     "compat-1-2",
     "renderer-software",
 ] }
 embassy-futures = { version = "0.1.2", features = [] }
-embassy-sync = { version = "0.7.2", features = [] }
-embassy-embedded-hal = { version = "0.5.0", features = [] }
+embassy-sync = { version = "0.8.0", features = [] }
+embassy-embedded-hal = { version = "0.6.0", features = [] }
 slint-generated = { path = "../slint-generated" }
 static_cell = { version = "2.1.1", features = ["nightly"] }

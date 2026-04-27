@@ -54,11 +54,14 @@ async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::_240MHz));
 
     // Reserve memory for dynamic allocations
-    esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 73744);
+    esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
 
-    // Set up the timer group for the embassy executor
+    // Set up the timer group and software interrupt for the embassy executor
     let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
-    esp_rtos::start(timg0.timer0);
+    let sw_interrupt = esp_hal::interrupt::software::SoftwareInterruptControl::new(
+        peripherals.SW_INTERRUPT,
+    );
+    esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
     info!("Embassy initialized!");
 
     // Initialize the PSRAM allocator for extra memory requirements
@@ -106,9 +109,7 @@ async fn main(spawner: Spawner) {
     );
 
     // Launch the GUI render task asynchronously
-    spawner
-        .spawn(render_task(window, display, touchpad))
-        .expect("Unable to spawn render task");
+    spawner.spawn(render_task(window, display, touchpad).expect("Unable to spawn render task"));
 
     // Initialize the radar (LD2410) sensor interface via UART
     let radar = initialize_radar(
@@ -118,9 +119,7 @@ async fn main(spawner: Spawner) {
     );
 
     // Launch the radar task asynchronously
-    spawner
-        .spawn(radar_task(radar))
-        .expect("Unable to spawn radar task");
+    spawner.spawn(radar_task(radar).expect("Unable to spawn radar task"));
 
     // Create and show the application window UI
     let app_window = AppWindow::new().expect("UI init failed");
