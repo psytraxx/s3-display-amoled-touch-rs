@@ -3,7 +3,7 @@
 //! This module handles the initialization and configuration of the BQ25896
 //! battery charger IC via I2C interface.
 
-use drivers::bq25896::asynch::BQ25896Async;
+use drivers::bq25896::BQ25896;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use esp_hal::Async;
@@ -23,7 +23,7 @@ const PMU_PRECHARGE_CURRENT: u16 = 128;
 const PMU_CONSTANT_CHARGE_CURRENT: u16 = 1536;
 
 /// Type alias for the BQ25896 PMU driver instance
-pub type Charger = BQ25896Async<I2cDevice<'static, CriticalSectionRawMutex, I2c<'static, Async>>>;
+pub type Charger = BQ25896<I2cDevice<'static, CriticalSectionRawMutex, I2c<'static, Async>>>;
 
 /// Initializes and configures the BQ25896 power management unit for battery charging.
 ///
@@ -54,7 +54,7 @@ pub async fn initialize_pmu(
     i2c_device: I2cDevice<'static, CriticalSectionRawMutex, I2c<'static, Async>>,
 ) -> Charger {
     // Create a new PMU instance on the I2C bus at the designated slave address
-    let mut pmu = BQ25896Async::new(i2c_device, BQ25896_SLAVE_ADDRESS);
+    let mut pmu = BQ25896::new(i2c_device, BQ25896_SLAVE_ADDRESS);
     pmu.init().await.expect("Failed to initialize BQ25896");
 
     // Set the battery charger target voltage

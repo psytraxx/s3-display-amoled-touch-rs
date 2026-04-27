@@ -202,6 +202,37 @@ where
     }
 }
 
+/// CST816x touch controller driver. Works with any I2C bus that implements
+/// `embedded_hal::i2c::I2c` (see `blocking` module) or
+/// `embedded_hal_async::i2c::I2c` (see `asynch` module, requires `async` feature).
+#[derive(Debug)]
+pub struct CST816x<I2C, PIN, RST, DELAY> {
+    pub(crate) i2c: I2C,
+    pub(crate) touch_int: PIN,
+    pub(crate) rst_pin: Option<RST>,
+    pub(crate) delay: DELAY,
+    pub(crate) gesture_state: GestureState,
+    pub(crate) gesture_config: SoftwareGestureConfig,
+}
+
+impl<I2C, PIN, RST, DELAY> CST816x<I2C, PIN, RST, DELAY> {
+    pub fn new(i2c: I2C, touch_int: PIN, rst_pin: Option<RST>, delay: DELAY) -> Self {
+        Self {
+            i2c,
+            touch_int,
+            rst_pin,
+            delay,
+            gesture_state: GestureState::default(),
+            gesture_config: SoftwareGestureConfig::default(),
+        }
+    }
+
+    pub fn set_software_gesture_config(&mut self, config: SoftwareGestureConfig) {
+        self.gesture_config = config;
+    }
+}
+
 #[cfg(feature = "async")]
 pub mod asynch;
+#[cfg(not(feature = "async"))]
 pub mod blocking;

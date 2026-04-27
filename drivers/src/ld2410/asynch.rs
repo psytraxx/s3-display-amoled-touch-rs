@@ -2,26 +2,11 @@ use super::*;
 use embedded_hal_async::delay::DelayNs;
 use embedded_io_async::{Read, Write};
 
-pub struct LD2410Async<UART, DELAY: DelayNs> {
-    uart: UART,
-    buf: [u8; LD2410_BUFFER_SIZE],
-    delay: DELAY,
-    config: PollingConfig,
-}
-
-impl<UART, DELAY: DelayNs> LD2410Async<UART, DELAY>
+impl<UART, DELAY> LD2410<UART, DELAY>
 where
     UART: Read + Write,
+    DELAY: DelayNs,
 {
-    pub fn new(uart: UART, delay: DELAY) -> Self {
-        Self {
-            uart,
-            buf: [0; LD2410_BUFFER_SIZE],
-            delay,
-            config: PollingConfig::default(),
-        }
-    }
-
     pub async fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
         let mut header = [0u8; 4];
         self.uart.read_exact(&mut header).await.map_err(|_| {

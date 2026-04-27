@@ -276,6 +276,28 @@ where
     }
 }
 
+/// LD2410 24 GHz radar sensor driver. Works with any UART that implements
+/// `embedded_io::{Read, Write}` (see `blocking` module) or
+/// `embedded_io_async::{Read, Write}` (see `asynch` module, requires `async` feature).
+pub struct LD2410<UART, DELAY> {
+    pub(crate) uart: UART,
+    pub(crate) buf: [u8; LD2410_BUFFER_SIZE],
+    pub(crate) delay: DELAY,
+    pub(crate) config: PollingConfig,
+}
+
+impl<UART, DELAY> LD2410<UART, DELAY> {
+    pub fn new(uart: UART, delay: DELAY) -> Self {
+        Self {
+            uart,
+            buf: [0; LD2410_BUFFER_SIZE],
+            delay,
+            config: PollingConfig::default(),
+        }
+    }
+}
+
 #[cfg(feature = "async")]
 pub mod asynch;
+#[cfg(not(feature = "async"))]
 pub mod blocking;

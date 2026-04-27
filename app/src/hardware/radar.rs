@@ -3,7 +3,7 @@
 //! This module handles the initialization of the LD2410 human presence radar
 //! sensor via UART interface.
 
-use drivers::ld2410::asynch::LD2410Async;
+use drivers::ld2410::LD2410;
 use embassy_time::Delay;
 use esp_hal::Async;
 use esp_hal::gpio::AnyPin;
@@ -12,7 +12,7 @@ use esp_hal::uart::{Config as UartConfig, Parity, StopBits, Uart};
 use log::info;
 
 /// Type alias for the LD2410 radar sensor driver instance
-pub type RadarSensor = LD2410Async<Uart<'static, Async>, Delay>;
+pub type RadarSensor = LD2410<Uart<'static, Async>, Delay>;
 
 /// Creates and initializes the LD2410 radar sensor interface using UART.
 ///
@@ -60,7 +60,7 @@ pub fn initialize_radar(
     info!("UART0 configured with RX/TX pins and async mode");
 
     // Construct the radar driver with the configured UART and a delay provider
-    let radar = LD2410Async::new(uart0, Delay);
+    let radar = LD2410::new(uart0, Delay);
     info!("LD2410 radar driver created successfully");
 
     radar

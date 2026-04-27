@@ -3,8 +3,8 @@
 //! This module handles the initialization and configuration of the CST816x
 //! capacitive touch controller via I2C interface.
 
+use drivers::cst816x::CST816x;
 use drivers::cst816x::IrqControl;
-use drivers::cst816x::asynch::CST816xAsync;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::Delay;
@@ -14,7 +14,7 @@ use esp_hal::i2c::master::I2c;
 use log::info;
 
 /// Type alias for the CST816x touchpad driver instance
-pub type Touchpad = CST816xAsync<
+pub type Touchpad = CST816x<
     I2cDevice<'static, CriticalSectionRawMutex, I2c<'static, Async>>,
     Input<'static>,
     Output<'static>,
@@ -49,7 +49,7 @@ pub async fn initialize_touchpad(
 ) -> Touchpad {
     // Configure the GPIO pin used for touch input (no pull-up/down)
     let touch_pin = Input::new(touch, InputConfig::default().with_pull(Pull::None));
-    let mut touchpad = CST816xAsync::new(i2c_device, touch_pin, None, Delay);
+    let mut touchpad = CST816x::new(i2c_device, touch_pin, None, Delay);
     touchpad.begin().await.expect("Failed to begin touchpad");
     let irq_config = IrqControl::EN_TOUCH | IrqControl::EN_CHANGE | IrqControl::EN_MOTION;
     touchpad

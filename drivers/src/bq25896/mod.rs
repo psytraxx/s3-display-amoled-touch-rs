@@ -284,6 +284,27 @@ pub enum ExitBoostModeVolt {
     MiniVolt2V5,
 }
 
+/// BQ25896 driver. Works with any I2C bus that implements
+/// `embedded_hal::i2c::I2c` (see `blocking` module) or
+/// `embedded_hal_async::i2c::I2c` (see `asynch` module, requires `async` feature).
+#[derive(Debug)]
+pub struct BQ25896<I2C> {
+    pub(crate) i2c: I2C,
+    pub(crate) adr: u8,
+    pub(crate) user_disable_charge: bool,
+}
+
+impl<I2C> BQ25896<I2C> {
+    pub fn new(i2c: I2C, adr: u8) -> Self {
+        Self {
+            i2c,
+            adr,
+            user_disable_charge: false,
+        }
+    }
+}
+
 #[cfg(feature = "async")]
 pub mod asynch;
+#[cfg(not(feature = "async"))]
 pub mod blocking;
