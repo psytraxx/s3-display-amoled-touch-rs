@@ -115,18 +115,14 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embassy-time",
  "embedded-graphics-core",
- "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-hal-bus",
- "embedded-io 0.7.1",
- "embedded-io-async 0.7.0",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-println",
  "esp-rtos",
- "libm",
  "log",
  "mipidsi",
  "slint",
@@ -1171,7 +1167,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "drivers"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "bitflags 2.11.1",
  "defmt 1.0.1",
@@ -1448,7 +1444,6 @@ checksum = "513e0b3a8fb7d3013a8ae17a834283f170deaf7d0eeab0a7c1a36ad4dd356d22"
 dependencies = [
  "critical-section",
  "embedded-hal 1.0.0",
- "embedded-hal-async",
 ]
 
 [[package]]
