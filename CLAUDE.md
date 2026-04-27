@@ -56,12 +56,6 @@ cargo doc -p app --no-deps --open
 cargo doc -p drivers --no-deps --open
 ```
 
-### Testing
-```bash
-# Run tests (drivers module has unit tests)
-cargo test -p drivers
-```
-
 ## Project Architecture
 
 ### Workspace Structure
