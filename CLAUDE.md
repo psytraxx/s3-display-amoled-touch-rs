@@ -10,6 +10,15 @@ This is an embedded Rust project for the LilyGo T-Display-S3 AMOLED Plus develop
 **Toolchain**: ESP Rust toolchain (channel = "esp")
 **Main Dependencies**: esp-hal, esp-rtos, embassy, Slint UI framework
 
+## Code Quality
+
+Always run these after finishing any changes:
+
+```bash
+cargo fmt
+cargo clippy
+```
+
 ## Build Commands
 
 Build and flash require sourcing ESP toolchain environment first (`source ~/export-esp.sh`).

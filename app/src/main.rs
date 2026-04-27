@@ -25,7 +25,9 @@ use esp_hal::Async;
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{AnyPin, Level, Output, OutputConfig, Pin};
 use esp_hal::i2c::master::I2c;
+use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::peripherals::I2C0;
+use esp_hal::timer::timg::TimerGroup;
 use log::info;
 use radar_task::radar_task;
 use render_task::render_task;
@@ -57,10 +59,8 @@ async fn main(spawner: Spawner) {
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
 
     // Set up the timer group and software interrupt for the embassy executor
-    let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
-    let sw_interrupt = esp_hal::interrupt::software::SoftwareInterruptControl::new(
-        peripherals.SW_INTERRUPT,
-    );
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+    let sw_interrupt = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
     info!("Embassy initialized!");
 
