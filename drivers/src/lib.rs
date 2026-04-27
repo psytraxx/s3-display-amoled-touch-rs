@@ -19,13 +19,14 @@ extern crate alloc;
 mod tests {
     use crate::bq25896::{BusStatus, ChargeStatus};
     use alloc::format;
+    use num_enum::TryFromPrimitive;
+
     #[test]
     fn test_bus_status_display() {
         assert_eq!(format!("{}", BusStatus::NoInput), "No input");
         assert_eq!(format!("{}", BusStatus::UsbSdp), "USB Host SDP");
         assert_eq!(format!("{}", BusStatus::Adapter), "Adapter");
         assert_eq!(format!("{}", BusStatus::Otg), "OTG");
-        assert_eq!(format!("{}", BusStatus::Unknown), "Unknown");
     }
 
     #[test]
@@ -38,20 +39,44 @@ mod tests {
     }
 
     #[test]
-    fn test_bus_status_from() {
-        assert_eq!(BusStatus::from(0), BusStatus::NoInput);
-        assert_eq!(BusStatus::from(1), BusStatus::UsbSdp);
-        assert_eq!(BusStatus::from(2), BusStatus::Adapter);
-        assert_eq!(BusStatus::from(3), BusStatus::Otg);
-        assert_eq!(BusStatus::from(4), BusStatus::Unknown);
+    fn test_bus_status_try_from() {
+        assert_eq!(
+            BusStatus::try_from_primitive(0u8).unwrap(),
+            BusStatus::NoInput
+        );
+        assert_eq!(
+            BusStatus::try_from_primitive(1u8).unwrap(),
+            BusStatus::UsbSdp
+        );
+        assert_eq!(
+            BusStatus::try_from_primitive(2u8).unwrap(),
+            BusStatus::Adapter
+        );
+        assert_eq!(BusStatus::try_from_primitive(3u8).unwrap(), BusStatus::Otg);
+        assert!(BusStatus::try_from_primitive(4u8).is_err());
     }
 
     #[test]
-    fn test_charge_status_from() {
-        assert_eq!(ChargeStatus::from(0), ChargeStatus::NoCharge);
-        assert_eq!(ChargeStatus::from(1), ChargeStatus::PreCharge);
-        assert_eq!(ChargeStatus::from(2), ChargeStatus::FastCharge);
-        assert_eq!(ChargeStatus::from(3), ChargeStatus::Done);
-        assert_eq!(ChargeStatus::from(4), ChargeStatus::Unknown);
+    fn test_charge_status_try_from() {
+        assert_eq!(
+            ChargeStatus::try_from_primitive(0u8).unwrap(),
+            ChargeStatus::NoCharge
+        );
+        assert_eq!(
+            ChargeStatus::try_from_primitive(1u8).unwrap(),
+            ChargeStatus::PreCharge
+        );
+        assert_eq!(
+            ChargeStatus::try_from_primitive(2u8).unwrap(),
+            ChargeStatus::FastCharge
+        );
+        assert_eq!(
+            ChargeStatus::try_from_primitive(3u8).unwrap(),
+            ChargeStatus::Done
+        );
+        assert_eq!(
+            ChargeStatus::try_from_primitive(4u8).unwrap(),
+            ChargeStatus::Unknown
+        );
     }
 }

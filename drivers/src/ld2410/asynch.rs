@@ -7,6 +7,7 @@ where
     UART: Read + Write,
     DELAY: DelayNs,
 {
+    /// Read one data frame and decode it. Awaits until a complete frame is available.
     pub async fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
         let mut header = [0u8; 4];
         self.uart.read_exact(&mut header).await.map_err(|_| {
@@ -80,6 +81,7 @@ where
         Ok(result)
     }
 
+    /// Query the sensor firmware version.
     pub async fn get_firmware_version(&mut self) -> Result<Option<FirmwareVersion>, LD2410Error> {
         self.config_command(Command::RequestFirmware, |data| {
             if data.len() < 8 {
@@ -99,6 +101,7 @@ where
         .map(|opt| opt.flatten())
     }
 
+    /// Send a restart command to the sensor.
     pub async fn request_restart(&mut self) -> Result<bool, LD2410Error> {
         let found = self
             .config_command(Command::RequestRestart, |_| ())
@@ -114,6 +117,7 @@ where
         Ok(found)
     }
 
+    /// Send a factory reset command to the sensor.
     pub async fn request_factory_reset(&mut self) -> Result<bool, LD2410Error> {
         let found = self
             .config_command(Command::RequestFactoryReset, |_| ())
@@ -134,6 +138,7 @@ where
         Ok(found)
     }
 
+    /// Query the current sensor gate sensitivity configuration.
     pub async fn get_configuration(&mut self) -> Result<Option<RadarConfiguration>, LD2410Error> {
         self.config_command(Command::RequestCurrentConfig, |data| {
             if data.len() < 24 {
@@ -164,6 +169,7 @@ where
         .map(|opt| opt.flatten())
     }
 
+    /// Request to enter engineering mode (detailed per-gate energy output).
     pub async fn request_start_engineering_mode(&mut self) -> Result<bool, LD2410Error> {
         let found = self
             .execute_command(Command::RequestStartEngineeringMode)
@@ -188,6 +194,7 @@ where
         Ok(found)
     }
 
+    /// Request to exit engineering mode.
     pub async fn request_end_engineering_mode(&mut self) -> Result<bool, LD2410Error> {
         let found = self
             .execute_command(Command::RequestEndEngineeringMode)

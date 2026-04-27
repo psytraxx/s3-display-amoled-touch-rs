@@ -101,11 +101,10 @@ where
                 Some(array) => array,
                 None => return None,
             };
-            let idle_time_bytes: [u8; 2] =
-                match data.get(22..24).and_then(|s| s.try_into().ok()) {
-                    Some(array) => array,
-                    None => return None,
-                };
+            let idle_time_bytes: [u8; 2] = match data.get(22..24).and_then(|s| s.try_into().ok()) {
+                Some(array) => array,
+                None => return None,
+            };
             Some(RadarConfiguration {
                 max_gate: data[1],
                 max_moving_gate: data[2],
