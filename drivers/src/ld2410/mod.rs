@@ -242,17 +242,19 @@ impl Command {
 }
 
 pub struct PollingConfig {
-    pub max_attempts: u8,
+    /// Milliseconds to wait between polling attempts (blocking driver) or before
+    /// reading the ACK (async driver).
     pub delay_ms: u32,
+    /// Maximum total wait time in milliseconds (blocking driver only; async callers
+    /// apply their own timeout via `embassy_time::with_timeout`).
     pub timeout_ms: u32,
 }
 
 impl Default for PollingConfig {
     fn default() -> Self {
         Self {
-            max_attempts: 10,
-            delay_ms: 10,
-            timeout_ms: 100,
+            delay_ms: 50,
+            timeout_ms: 500,
         }
     }
 }

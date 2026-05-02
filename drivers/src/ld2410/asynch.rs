@@ -9,22 +9,7 @@ where
 {
     /// Read one data frame and decode it. Awaits until a complete frame is available.
     pub async fn get_radar_data(&mut self) -> Result<Option<RadarData>, LD2410Error> {
-        let mut header = [0u8; 4];
-        self.uart.read_exact(&mut header).await.map_err(|_| {
-            #[cfg(feature = "log-04")]
-            log::error!("Failed to read header from UART");
-            LD2410Error::IoError
-        })?;
-
-        if header != DATA_HEADER {
-            #[cfg(feature = "log-04")]
-            log::warn!(
-                "Invalid header received: {:02X?} (expected: {:02X?})",
-                header,
-                DATA_HEADER
-            );
-            return Err(LD2410Error::InvalidHeader);
-        }
+        self.sync_to_header(&DATA_HEADER).await?;
 
         let mut len_buf = [0u8; 2];
         self.uart.read_exact(&mut len_buf).await.map_err(|_| {
@@ -242,8 +227,9 @@ where
         Ok(processed)
     }
 
-    /// Send `command` and poll for an ACK frame. Returns `Some(payload_end)` on
+    /// Send `command` and wait for an ACK frame. Returns `Some(payload_end)` on
     /// success; response data is at `self.buf[4..payload_end]`.
+    /// Callers are responsible for applying a timeout (e.g. via `embassy_time::with_timeout`).
     async fn execute_command(&mut self, command: Command) -> Result<Option<usize>, LD2410Error> {
         #[cfg(feature = "log-04")]
         log::debug!("Executing command: {:?}", command);
@@ -264,39 +250,36 @@ where
             LD2410Error::IoError
         })?;
 
+        // A small delay lets the sensor finish any in-flight data frame before
+        // it sends the ACK, preventing DATA_HEADER bytes from being misread as
+        // CMD_HEADER bytes.
+        self.delay.delay_ms(self.config.delay_ms).await;
+
         let expected_ack = command.expected_ack();
-        let mut elapsed_ms = 0;
-        while elapsed_ms < self.config.timeout_ms {
-            self.delay.delay_ms(self.config.delay_ms).await;
-            elapsed_ms += self.config.delay_ms;
-            if let Ok(Some(len)) = self.read_command_frame(expected_ack).await {
+        match self.read_command_frame(expected_ack).await {
+            Ok(Some(len)) => {
                 #[cfg(feature = "log-04")]
                 log::debug!(
                     "Command {:?} successful, received {} bytes",
                     command,
                     len - 4
                 );
-                return Ok(Some(len));
+                Ok(Some(len))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => {
+                #[cfg(feature = "log-04")]
+                log::warn!("Command {:?} failed: {:?}", command, e);
+                Err(e)
             }
         }
-
-        #[cfg(feature = "log-04")]
-        log::warn!("Command {:?} timed out after {}ms", command, elapsed_ms);
-        Ok(None)
     }
 
     /// Read one command-response frame into `self.buf`. Returns `Some(len)` where
     /// `self.buf[0..len]` is the full ACK payload and `self.buf[4..len]` is the
     /// response data (after the 4-byte ack/status prefix).
     async fn read_command_frame(&mut self, expected_ack: u8) -> Result<Option<usize>, LD2410Error> {
-        let mut header = [0u8; 4];
-        self.uart
-            .read_exact(&mut header)
-            .await
-            .map_err(|_| LD2410Error::IoError)?;
-        if header != CMD_HEADER {
-            return Err(LD2410Error::InvalidHeader);
-        }
+        self.sync_to_header(&CMD_HEADER).await?;
 
         let mut len_buf = [0u8; 2];
         self.uart
@@ -330,6 +313,26 @@ where
             }
         }
         Ok(None)
+    }
+
+    /// Read bytes one at a time until the last four bytes match `target`.
+    /// This resyncs the stream after a framing error without discarding valid frames.
+    async fn sync_to_header(&mut self, target: &[u8; 4]) -> Result<(), LD2410Error> {
+        let mut window = [0u8; 4];
+        self.uart
+            .read_exact(&mut window)
+            .await
+            .map_err(|_| LD2410Error::IoError)?;
+        while window != *target {
+            window[0] = window[1];
+            window[1] = window[2];
+            window[2] = window[3];
+            self.uart
+                .read_exact(&mut window[3..4])
+                .await
+                .map_err(|_| LD2410Error::IoError)?;
+        }
+        Ok(())
     }
 
     fn decode_data_frame(&self, buf: &[u8]) -> Option<RadarData> {
