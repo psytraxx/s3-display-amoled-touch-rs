@@ -32,7 +32,7 @@ impl<'a> Controller<'a> {
         loop {
             match select(ACTION.receive(), RADAR_DATA.receive()).await {
                 Either::First(action) => {
-                    info!("process action {:?}", &action);
+                    info!("process action {:?}", action);
                     match self.process_action(action).await {
                         Ok(()) => {
                             // all good
