@@ -25,7 +25,6 @@ use esp_hal::Async;
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{AnyPin, Level, Output, OutputConfig, Pin};
 use esp_hal::i2c::master::I2c;
-use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::peripherals::I2C0;
 use esp_hal::timer::timg::TimerGroup;
 use log::info;
@@ -60,8 +59,7 @@ async fn main(spawner: Spawner) {
 
     // Set up the timer group and software interrupt for the embassy executor
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let sw_interrupt = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
+    esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
     info!("Embassy initialized!");
 
     // Initialize the PSRAM allocator for extra memory requirements

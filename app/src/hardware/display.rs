@@ -4,13 +4,12 @@
 //! via SPI interface with DMA support for high-speed data transfer.
 
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use esp_hal::dma::DmaTxBuf;
 use esp_hal::gpio::{AnyPin, Level, Output, OutputConfig};
 use esp_hal::peripherals::{DMA_CH0, SPI2};
 use esp_hal::spi::Mode;
-use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDmaBus};
+use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDma};
 use esp_hal::time::Rate;
-use esp_hal::{Blocking, dma_buffers};
+use esp_hal::{Blocking, dma_rx_buffer, dma_tx_buffer};
 use mipidsi::interface::SpiInterface;
 use mipidsi::models::RM67162;
 use mipidsi::options::{Orientation, Rotation};
@@ -25,7 +24,7 @@ pub const DISPLAY_WIDTH: u16 = 536;
 pub type TouchDisplay = Display<
     SpiInterface<
         'static,
-        ExclusiveDevice<SpiDmaBus<'static, Blocking>, Output<'static>, NoDelay>,
+        ExclusiveDevice<SpiDma<'static, Blocking>, Output<'static>, NoDelay>,
         Output<'static>,
     >,
     RM67162,
@@ -84,13 +83,11 @@ pub fn initialize_display(
     .with_mosi(mosi)
     .with_dma(dma);
 
-    #[allow(clippy::manual_div_ceil)]
-    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
-    let dma_rx_buf = esp_hal::dma::DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
-    let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
+    let dma_rx_buf = dma_rx_buffer!(32000).unwrap();
+    let dma_tx_buf = dma_tx_buffer!(32000).unwrap();
 
-    // Create the SPI DMA bus with the configured buffers
-    let spi = SpiDmaBus::new(spi_dma, dma_rx_buf, dma_tx_buf);
+    // `SpiDma` implements `SpiBus` directly once buffers are attached
+    let spi = spi_dma.with_buffers(dma_rx_buf, dma_tx_buf);
 
     // Attach the SPI device using the chip-select control pin (no delay used)
     let spi_device = ExclusiveDevice::new_no_delay(spi, cs).unwrap();
