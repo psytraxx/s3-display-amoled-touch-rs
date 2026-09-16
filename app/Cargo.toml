@@ -4,11 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
-esp-hal = { version = "1.2.0-rc.0", features = [
-    "esp32s3",
-    "log-04",
-    "unstable",
-] }
+esp-hal = { version = "1.2.1", features = ["esp32s3", "log-04", "unstable"] }
 
 esp-rtos = { version = "0.4.0", features = [
     "embassy",
@@ -18,7 +14,7 @@ esp-rtos = { version = "0.4.0", features = [
 ] }
 
 esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32s3", "log-04"] }
-log = "0.4.28"
+log = "0.4.34"
 esp-alloc = "0.11.0"
 esp-backtrace = { version = "0.20.0", features = [
     "esp32s3",
@@ -30,10 +26,10 @@ embassy-executor = { version = "0.10.0", features = ["log"] }
 embassy-time = { version = "0.5.1", features = ["log"] }
 mipidsi = { version = "0.10.0" }
 drivers = { path = "../drivers", features = ["log-04", "async"] }
-embedded-graphics-core = { version = "0.4.0", features = [] }
+embedded-graphics-core = { version = "0.4.1", features = [] }
 embedded-hal-bus = { version = "0.3.0" }
 embedded-hal-async = { version = "1.0.0" }
-slint = { version = "1.16.1", default-features = false, features = [
+slint = { version = "1.18.0", default-features = false, features = [
     "libm",
     "unsafe-single-threaded",
     "compat-1-2",
