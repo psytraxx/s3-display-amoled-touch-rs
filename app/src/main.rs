@@ -28,7 +28,7 @@ use esp_hal::i2c::master::I2c;
 use esp_hal::peripherals::I2C0;
 use esp_hal::timer::timg::TimerGroup;
 use log::info;
-use radar_task::radar_task;
+use radar_task::{probe_radar, radar_task};
 use render_task::render_task;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::{ComponentHandle, PhysicalSize};
@@ -110,17 +110,23 @@ async fn main(spawner: Spawner) {
     spawner.spawn(render_task(window, display, touchpad).expect("Unable to spawn render task"));
 
     // Initialize the radar (LD2410) sensor interface via UART
-    let radar = initialize_radar(
+    let mut radar = initialize_radar(
         peripherals.UART0,
         peripherals.GPIO44.degrade(),
         peripherals.GPIO43.degrade(),
     );
 
-    // Launch the radar task asynchronously
-    spawner.spawn(radar_task(radar).expect("Unable to spawn radar task"));
+    // Probe the radar sensor before committing to the task and UI tab
+    let radar_available = probe_radar(&mut radar).await;
+    if radar_available {
+        spawner.spawn(radar_task(radar).expect("Unable to spawn radar task"));
+    } else {
+        info!("Radar sensor not detected, disabling Radar tab");
+    }
 
     // Create and show the application window UI
     let app_window = AppWindow::new().expect("UI init failed");
+    app_window.set_radar_available(radar_available);
     app_window.show().expect("UI show failed");
 
     // Initialize the PMU for battery charging control

@@ -7,6 +7,7 @@ export component AppWindow inherits Window {
     in-out property <bool> charging: true;
     in-out property <string> pmu-details: "No data yet\n\nPress refresh in PMU Details screen";
     in-out property <string> radar-data: "Waiting for radar data...\n\nData updates automatically";
+    in-out property <bool> radar-available: true;
     in-out property <int> current-screen: 0; // 0: Main, 1: PMU Details, 2: Radar
 
     // Callbacks
@@ -50,7 +51,7 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                NavButton {
+                if root.radar-available: NavButton {
                     label: "Radar";
                     active: root.current-screen == 2;
                     clicked => {
@@ -123,12 +124,12 @@ export component AppWindow inherits Window {
                     Flickable {
                         height: parent.height;
                         interactive: true;
-                        viewport-height: pmu-text.preferred-height;
+                        content-height: pmu-text.preferred-height;
 
                         pmu-text := Text {
                             text: root.pmu-details;
                             font-size: Theme.font-size-small;
-                            width: parent.viewport-width;
+                            width: parent.content-width;
                             wrap: word-wrap;
                             color: #201f1e;
                         }
@@ -162,19 +163,19 @@ export component AppWindow inherits Window {
             }
 
             // Radar Screen
-            if root.current-screen == 2: VerticalLayout {
+            if root.current-screen == 2 && root.radar-available: VerticalLayout {
                 padding: 8px;
                 spacing: 6px;
 
                 Flickable {
                     height: parent.height;
                     interactive: true;
-                    viewport-height: radar-text.preferred-height;
+                    content-height: radar-text.preferred-height;
 
                     radar-text := Text {
                         text: root.radar-data;
                         font-size: Theme.font-size-small;
-                        width: parent.viewport-width;
+                        width: parent.content-width;
                         wrap: word-wrap;
                         color: #201f1e;
                     }

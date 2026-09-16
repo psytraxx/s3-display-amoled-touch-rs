@@ -19,6 +19,14 @@ cargo fmt
 cargo clippy
 ```
 
+## Changelog
+
+Before pushing any commits, update `CHANGELOG.md` with an entry describing the change.
+
+- Group entries under a date heading (`## YYYY-MM-DD`), with an `## Unreleased` section for changes not yet tied to a release.
+- Within a date, use `### Added`, `### Changed`, `### Fixed`, `### Removed` subsections as needed.
+- Describe **why** the change was made and **what** effect it has for the user/device behavior — not how it was implemented in code. Skip implementation details like function or file names.
+
 ## Build Commands
 
 Build and flash require sourcing ESP toolchain environment first (`source ~/export-esp.sh`).

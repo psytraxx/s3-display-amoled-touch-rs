@@ -9,24 +9,26 @@ pub type RadarDataChannelType = Channel<CriticalSectionRawMutex, RadarData, 2>;
 
 pub static RADAR_DATA: RadarDataChannelType = Channel::new();
 
-#[embassy_executor::task()]
-pub async fn radar_task(mut radar: RadarSensor) {
+/// Probes the radar sensor by requesting a factory reset, returning whether it responded.
+///
+/// This lets the caller decide whether to spawn [`radar_task`] and show the Radar UI tab
+/// before committing to either.
+pub async fn probe_radar(radar: &mut RadarSensor) -> bool {
     use embassy_time::{Duration, with_timeout};
 
-    info!("Radar task starting...");
     info!("Waiting 100ms for radar sensor to power up...");
     Timer::after_millis(100).await;
 
-    // Try factory reset with timeout
     info!("Requesting factory reset...");
     match with_timeout(Duration::from_secs(2), radar.request_factory_reset()).await {
         Ok(Ok(success)) => {
             info!("Factory reset complete: {:?}", success);
+            true
         }
         Ok(Err(e)) => {
             error!("Factory reset failed: {:?}", e);
-            error!("Radar sensor may not be connected or responding. Task will exit.");
-            return;
+            error!("Radar sensor may not be connected or responding.");
+            false
         }
         Err(_) => {
             error!("Factory reset timed out after 2 seconds");
@@ -35,10 +37,16 @@ pub async fn radar_task(mut radar: RadarSensor) {
             error!("  - Check GPIO43 (TX) and GPIO44 (RX) wiring");
             error!("  - Verify baud rate is 256000");
             error!("  - Check if radar sensor needs external power");
-            error!("Task will exit.");
-            return;
+            false
         }
     }
+}
+
+#[embassy_executor::task()]
+pub async fn radar_task(mut radar: RadarSensor) {
+    use embassy_time::{Duration, with_timeout};
+
+    info!("Radar task starting...");
 
     // Try getting firmware version with timeout
     info!("Requesting firmware version...");
