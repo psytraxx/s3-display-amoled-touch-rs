@@ -23,7 +23,7 @@ cargo clippy
 
 Before pushing any commits, update `CHANGELOG.md` with an entry describing the change.
 
-- Group entries under a date heading (`## YYYY-MM-DD`), with an `## Unreleased` section for changes not yet tied to a release.
+- Group entries under a date heading (`## YYYY-MM-DD`), using today's date. Add a new heading per push date; don't reuse an old one or use "Unreleased".
 - Within a date, use `### Added`, `### Changed`, `### Fixed`, `### Removed` subsections as needed.
 - Describe **why** the change was made and **what** effect it has for the user/device behavior — not how it was implemented in code. Skip implementation details like function or file names.
 

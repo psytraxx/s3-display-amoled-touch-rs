@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Entries are grouped by date and by type (Added, Changed, Fixed, Removed). Each entry explains *why* the change was made and *what* effect it has, not how it was implemented.
 
-## Unreleased
+## 2026-09-16
 
 ### Fixed
 
